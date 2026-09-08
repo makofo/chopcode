@@ -1,0 +1,73 @@
+body {
+  margin: 0;
+  font-family: -apple-system, system-ui, sans-serif;
+  background: var(--tg-theme-bg-color, #fff);
+  color: var(--tg-theme-text-color, #000);
+}
+
+.tabs {
+  display: flex;
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  border-top: 1px solid #e0e0e0;
+  background: var(--tg-theme-secondary-bg-color, #f5f5f5);
+}
+
+.tabs button {
+  flex: 1;
+  padding: 12px 4px;
+  border: none;
+  background: none;
+  font-size: 12px;
+  color: inherit;
+}
+
+.tabs button.active {
+  color: var(--tg-theme-button-color, #2481cc);
+  font-weight: bold;
+}
+
+.content {
+  padding: 16px;
+  padding-bottom: 80px;
+}
+
+.card {
+  border: 1px solid #e0e0e0;
+  border-radius: 12px;
+  padding: 12px;
+  margin-bottom: 10px;
+}
+
+input, textarea, select {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px;
+  margin-bottom: 8px;
+  border-radius: 8px;
+  border: 1px solid #ccc;
+}
+
+button.primary {
+  background: var(--tg-theme-button-color, #2481cc);
+  color: var(--tg-theme-button-text-color, #fff);
+  border: none;
+  border-radius: 8px;
+  padding: 10px 14px;
+  width: 100%;
+}
+
+.mic-btn {
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  border: none;
+  background: #eee;
+}
+
+.mic-btn.on {
+  background: #ff4d4f;
+  color: white;
+}
