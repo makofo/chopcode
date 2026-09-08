@@ -16,7 +16,7 @@ export default function Reminders() {
 
   const add = async () => {
     if (!text || !dueAt) return;
-    await api.post("/api/reminders", { text, dueAt, repeat: "none" });
+        await api.post("/api/reminders", { text, dueAt: new Date(dueAt).toISOString(), repeat: "none" });
     setText("");
     setDueAt("");
     load();
