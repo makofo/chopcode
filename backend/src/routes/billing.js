@@ -8,6 +8,16 @@ router.get("/plans", (req, res) => {
   res.json({ plans: getPlansWithSavings() });
 });
 
+// Returns whether the current user has active PRO (lifetime or a live subscription).
+// The frontend uses this to unlock premium themes and the PRO state.
+router.get("/me", async (req, res) => {
+  const user = await prisma.user.findUnique({ where: { id: req.user.id } });
+  const isPremium =
+    !!user &&
+    (user.isLifetime || (user.subscriptionUntil && new Date(user.subscriptionUntil) > new Date()));
+  res.json({ isPremium });
+});
+
 // STUB for checkout. Real ruble payment will go through the payment provider
 // (Platega): create a payment, return the pay URL, and activate the subscription
 // in the provider webhook after a successful payment.
