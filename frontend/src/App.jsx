@@ -175,11 +175,22 @@ export default function App() {
   const [theme, setTheme] = useState(() => {
     try { return localStorage.getItem("chop-theme") || "default"; } catch (e) { return "default"; }
   });
-  const [isPremium] = useState(() => {
+  const [isPremium, setIsPremium] = useState(() => {
     try { return localStorage.getItem("chop-premium") === "1"; } catch (e) { return false; }
   });
   const [pickerOpen, setPickerOpen] = useState(false);
   const [premiumOpen, setPremiumOpen] = useState(false);
+
+  // Ask the backend whether this user really has PRO (lifetime / active subscription),
+  // so premium themes unlock automatically after /pro, not just from a local flag.
+  useEffect(() => {
+    api.get("/api/billing/me")
+      .then((r) => {
+        setIsPremium(!!r.isPremium);
+        try { localStorage.setItem("chop-premium", r.isPremium ? "1" : "0"); } catch (e) {}
+      })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (theme === "default") document.documentElement.removeAttribute("data-theme");
