@@ -68,6 +68,21 @@ bot.command("voicetoken", async (ctx) => {
   );
 });
 
+// Manual PRO activation: "/pro <code>" grants lifetime PRO if the code matches
+// the PRO_CODE env var. Share the code only with people you want to give PRO.
+bot.command("pro", async (ctx) => {
+  const parts = ctx.message.text.trim().split(/\s+/);
+  const code = parts[1];
+  if (!process.env.PRO_CODE || code !== process.env.PRO_CODE) {
+    return ctx.reply("\u041d\u0435\u0432\u0435\u0440\u043d\u044b\u0439 \u043a\u043e\u0434 \u0430\u043a\u0442\u0438\u0432\u0430\u0446\u0438\u0438.");
+  }
+  const telegramId = String(ctx.from.id);
+  const user = await prisma.user.findUnique({ where: { telegramId } });
+  if (!user) return ctx.reply("\u0421\u043d\u0430\u0447\u0430\u043b\u0430 \u043d\u0430\u0436\u043c\u0438 /start, \u043f\u043e\u0442\u043e\u043c \u043e\u0442\u043f\u0440\u0430\u0432\u044c /pro \u0438 \u043a\u043e\u0434.");
+  await prisma.user.update({ where: { id: user.id }, data: { isLifetime: true } });
+  await ctx.reply("\u0413\u043e\u0442\u043e\u0432\u043e! PRO \u0430\u043a\u0442\u0438\u0432\u0438\u0440\u043e\u0432\u0430\u043d \u043d\u0430\u0432\u0441\u0435\u0433\u0434\u0430 \ud83d\udc08\u200d\u2b1b\u2764\ufe0f \u041e\u0442\u043a\u0440\u043e\u0439 \u0427\u043e\u043f\u0430 \u2014 \u0432\u0441\u0435 \u0444\u0443\u043d\u043a\u0446\u0438\u0438 \u0431\u0435\u0437 \u043e\u0433\u0440\u0430\u043d\u0438\u0447\u0435\u043d\u0438\u0439.");
+});
+
 // --- Simple send throttler: at most ~25 messages/sec total,
 // to stay under Telegram limits during mass reminder sends.
 const SEND_INTERVAL_MS = 40; // ~25 msg/sec
