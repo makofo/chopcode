@@ -1,70 +1,72 @@
-// Классификация свободного текста (из голоса) в структурированную запись
-// для одной из вкладок: reminder | transaction | meal | diary.
-// Используем Claude API (модель claude-sonnet-4-6) со строгим требованием вернуть только JSON.
+// Classifies free-form text (from voice) into a structured entry for one of the
+// tabs: reminder | transaction | meal | diary.
+// Uses Groq's OpenAI-compatible chat API (Llama 3.3, free tier) in JSON mode.
 
-const SYSTEM_PROMPT = `Ты — модуль классификации для приложения-органайзера.
-Пользователь наговорил голосовое сообщение, оно уже расшифровано в текст (на русском).
-Определи, к какой из категорий это относится, и извлеки структурированные данные.
+const SYSTEM_PROMPT = `\u0422\u044b \u2014 \u043c\u043e\u0434\u0443\u043b\u044c \u043a\u043b\u0430\u0441\u0441\u0438\u0444\u0438\u043a\u0430\u0446\u0438\u0438 \u0434\u043b\u044f \u043f\u0440\u0438\u043b\u043e\u0436\u0435\u043d\u0438\u044f-\u043e\u0440\u0433\u0430\u043d\u0430\u0439\u0437\u0435\u0440\u0430.
+\u041f\u043e\u043b\u044c\u0437\u043e\u0432\u0430\u0442\u0435\u043b\u044c \u043d\u0430\u0433\u043e\u0432\u043e\u0440\u0438\u043b \u0433\u043e\u043b\u043e\u0441\u043e\u0432\u043e\u0435 \u0441\u043e\u043e\u0431\u0449\u0435\u043d\u0438\u0435, \u043e\u043d\u043e \u0443\u0436\u0435 \u0440\u0430\u0441\u0448\u0438\u0444\u0440\u043e\u0432\u0430\u043d\u043e \u0432 \u0442\u0435\u043a\u0441\u0442 (\u043d\u0430 \u0440\u0443\u0441\u0441\u043a\u043e\u043c).
+\u041e\u043f\u0440\u0435\u0434\u0435\u043b\u0438, \u043a \u043a\u0430\u043a\u043e\u0439 \u0438\u0437 \u043a\u0430\u0442\u0435\u0433\u043e\u0440\u0438\u0439 \u044d\u0442\u043e \u043e\u0442\u043d\u043e\u0441\u0438\u0442\u0441\u044f, \u0438 \u0438\u0437\u0432\u043b\u0435\u043a\u0438 \u0441\u0442\u0440\u0443\u043a\u0442\u0443\u0440\u0438\u0440\u043e\u0432\u0430\u043d\u043d\u044b\u0435 \u0434\u0430\u043d\u043d\u044b\u0435.
 
-Категории и формат ответа (ответь ТОЛЬКО валидным JSON, без markdown и пояснений):
+\u041a\u0430\u0442\u0435\u0433\u043e\u0440\u0438\u0438 \u0438 \u0444\u043e\u0440\u043c\u0430\u0442 \u043e\u0442\u0432\u0435\u0442\u0430 (\u043e\u0442\u0432\u0435\u0442\u044c \u0422\u041e\u041b\u042c\u041a\u041e \u0432\u0430\u043b\u0438\u0434\u043d\u044b\u043c JSON-\u043e\u0431\u044a\u0435\u043a\u0442\u043e\u043c, \u0431\u0435\u0437 markdown \u0438 \u043f\u043e\u044f\u0441\u043d\u0435\u043d\u0438\u0439):
 
-1. Напоминание — если пользователь просит напомнить о чём-то в конкретное время/дату.
+1. \u041d\u0430\u043f\u043e\u043c\u0438\u043d\u0430\u043d\u0438\u0435 \u2014 \u0435\u0441\u043b\u0438 \u043f\u043e\u043b\u044c\u0437\u043e\u0432\u0430\u0442\u0435\u043b\u044c \u043f\u0440\u043e\u0441\u0438\u0442 \u043d\u0430\u043f\u043e\u043c\u043d\u0438\u0442\u044c \u043e \u0447\u0451\u043c-\u0442\u043e \u0432 \u043a\u043e\u043d\u043a\u0440\u0435\u0442\u043d\u043e\u0435 \u0432\u0440\u0435\u043c\u044f/\u0434\u0430\u0442\u0443.
 {"type":"reminder","data":{"text":"...","dueAt":"2026-09-09T18:00:00","repeat":"none"}}
 repeat: "none" | "daily" | "weekly"
-Если время не указано явно — поставь разумное время (например, через 1 час от текущего момента).
-Текущее время: {{NOW}}
+\u0415\u0441\u043b\u0438 \u0432\u0440\u0435\u043c\u044f \u043d\u0435 \u0443\u043a\u0430\u0437\u0430\u043d\u043e \u044f\u0432\u043d\u043e \u2014 \u043f\u043e\u0441\u0442\u0430\u0432\u044c \u0440\u0430\u0437\u0443\u043c\u043d\u043e\u0435 \u0432\u0440\u0435\u043c\u044f (\u043d\u0430\u043f\u0440\u0438\u043c\u0435\u0440, \u0447\u0435\u0440\u0435\u0437 1 \u0447\u0430\u0441 \u043e\u0442 \u0442\u0435\u043a\u0443\u0449\u0435\u0433\u043e \u043c\u043e\u043c\u0435\u043d\u0442\u0430).
+\u0422\u0435\u043a\u0443\u0449\u0435\u0435 \u0432\u0440\u0435\u043c\u044f: {{NOW}}
 
-2. Финансовая операция — если упомянута трата или доход с суммой.
-{"type":"transaction","data":{"amount":500,"category":"еда","type":"expense","note":"..."}}
+2. \u0424\u0438\u043d\u0430\u043d\u0441\u043e\u0432\u0430\u044f \u043e\u043f\u0435\u0440\u0430\u0446\u0438\u044f \u2014 \u0435\u0441\u043b\u0438 \u0443\u043f\u043e\u043c\u044f\u043d\u0443\u0442\u0430 \u0442\u0440\u0430\u0442\u0430 \u0438\u043b\u0438 \u0434\u043e\u0445\u043e\u0434 \u0441 \u0441\u0443\u043c\u043c\u043e\u0439.
+{"type":"transaction","data":{"amount":500,"category":"\u0435\u0434\u0430","type":"expense","note":"..."}}
 type: "expense" | "income"
 
-3. Приём пищи — если пользователь говорит, что съел/выпил что-то (даже без точных ккал — оцени примерно по типичным значениям для этого блюда/продукта).
+3. \u041f\u0440\u0438\u0451\u043c \u043f\u0438\u0449\u0438 \u2014 \u0435\u0441\u043b\u0438 \u043f\u043e\u043b\u044c\u0437\u043e\u0432\u0430\u0442\u0435\u043b\u044c \u0433\u043e\u0432\u043e\u0440\u0438\u0442, \u0447\u0442\u043e \u0441\u044a\u0435\u043b/\u0432\u044b\u043f\u0438\u043b \u0447\u0442\u043e-\u0442\u043e (\u0434\u0430\u0436\u0435 \u0431\u0435\u0437 \u0442\u043e\u0447\u043d\u044b\u0445 \u043a\u043a\u0430\u043b \u2014 \u043e\u0446\u0435\u043d\u0438 \u043f\u0440\u0438\u043c\u0435\u0440\u043d\u043e \u043f\u043e \u0442\u0438\u043f\u0438\u0447\u043d\u044b\u043c \u0437\u043d\u0430\u0447\u0435\u043d\u0438\u044f\u043c \u0434\u043b\u044f \u044d\u0442\u043e\u0433\u043e \u0431\u043b\u044e\u0434\u0430/\u043f\u0440\u043e\u0434\u0443\u043a\u0442\u0430).
 {"type":"meal","data":{"name":"...","calories":350,"protein":20,"fat":10,"carbs":40}}
 
-4. Запись в дневник — если это просто мысль, размышление, описание дня/настроения без явного указания на напоминание, трату или еду.
+4. \u0417\u0430\u043f\u0438\u0441\u044c \u0432 \u0434\u043d\u0435\u0432\u043d\u0438\u043a \u2014 \u0435\u0441\u043b\u0438 \u044d\u0442\u043e \u043f\u0440\u043e\u0441\u0442\u043e \u043c\u044b\u0441\u043b\u044c, \u0440\u0430\u0437\u043c\u044b\u0448\u043b\u0435\u043d\u0438\u0435, \u043e\u043f\u0438\u0441\u0430\u043d\u0438\u0435 \u0434\u043d\u044f/\u043d\u0430\u0441\u0442\u0440\u043e\u0435\u043d\u0438\u044f \u0431\u0435\u0437 \u044f\u0432\u043d\u043e\u0433\u043e \u0443\u043a\u0430\u0437\u0430\u043d\u0438\u044f \u043d\u0430 \u043d\u0430\u043f\u043e\u043c\u0438\u043d\u0430\u043d\u0438\u0435, \u0442\u0440\u0430\u0442\u0443 \u0438\u043b\u0438 \u0435\u0434\u0443.
 {"type":"diary","data":{"text":"...","mood":"..."}}
-mood — необязательно, укажи только если настроение явно прослеживается, иначе null.
+mood \u2014 \u043d\u0435\u043e\u0431\u044f\u0437\u0430\u0442\u0435\u043b\u044c\u043d\u043e, \u0443\u043a\u0430\u0436\u0438 \u0442\u043e\u043b\u044c\u043a\u043e \u0435\u0441\u043b\u0438 \u043d\u0430\u0441\u0442\u0440\u043e\u0435\u043d\u0438\u0435 \u044f\u0432\u043d\u043e \u043f\u0440\u043e\u0441\u043b\u0435\u0436\u0438\u0432\u0430\u0435\u0442\u0441\u044f, \u0438\u043d\u0430\u0447\u0435 null.
 
-Если не уверен между категориями — выбирай diary как самый безопасный вариант.
-Отвечай строго JSON-объектом верхнего уровня, без дополнительного текста.`;
+\u0415\u0441\u043b\u0438 \u043d\u0435 \u0443\u0432\u0435\u0440\u0435\u043d \u043c\u0435\u0436\u0434\u0443 \u043a\u0430\u0442\u0435\u0433\u043e\u0440\u0438\u044f\u043c\u0438 \u2014 \u0432\u044b\u0431\u0438\u0440\u0430\u0439 diary \u043a\u0430\u043a \u0441\u0430\u043c\u044b\u0439 \u0431\u0435\u0437\u043e\u043f\u0430\u0441\u043d\u044b\u0439 \u0432\u0430\u0440\u0438\u0430\u043d\u0442.
+\u041e\u0442\u0432\u0435\u0447\u0430\u0439 \u0441\u0442\u0440\u043e\u0433\u043e JSON-\u043e\u0431\u044a\u0435\u043a\u0442\u043e\u043c \u0432\u0435\u0440\u0445\u043d\u0435\u0433\u043e \u0443\u0440\u043e\u0432\u043d\u044f, \u0431\u0435\u0437 \u0434\u043e\u043f\u043e\u043b\u043d\u0438\u0442\u0435\u043b\u044c\u043d\u043e\u0433\u043e \u0442\u0435\u043a\u0441\u0442\u0430.`;
 
 export async function classifyText(text) {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const apiKey = process.env.GROQ_API_KEY;
   if (!apiKey) {
-    throw new Error("ANTHROPIC_API_KEY не задан — ИИ-классификация не настроена");
+    throw new Error("GROQ_API_KEY is not set - AI classification is not configured");
   }
 
   const now = new Date().toISOString();
   const systemPrompt = SYSTEM_PROMPT.replace("{{NOW}}", now);
 
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
+  const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
+      Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model: "claude-haiku-4-5-20251001", // самая дешёвая модель — для классификации/извлечения полей достаточно
-      max_tokens: 300,
-      system: systemPrompt,
-      messages: [{ role: "user", content: text }],
+      model: "llama-3.3-70b-versatile", // free, strong enough for field extraction
+      temperature: 0,
+      response_format: { type: "json_object" },
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: text },
+      ],
     }),
   });
 
   if (!res.ok) {
     const errText = await res.text();
-    throw new Error(`Claude API error: ${res.status} ${errText}`);
+    throw new Error(`Groq LLM error: ${res.status} ${errText}`);
   }
 
   const data = await res.json();
-  const raw = data.content.find((c) => c.type === "text")?.text ?? "{}";
+  const raw = data.choices?.[0]?.message?.content ?? "{}";
   const clean = raw.replace(/```json|```/g, "").trim();
 
   try {
     return JSON.parse(clean);
   } catch {
-    // Если модель вернула что-то невалидное — безопасный fallback в дневник
+    // Safe fallback to diary if the model returned something invalid
     return { type: "diary", data: { text, mood: null } };
   }
 }
