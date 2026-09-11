@@ -3,7 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql" // при таком объёме пользователей SQLite не подойдёт
+  provider = "postgresql" // SQLite would not scale for this many users
   url      = env("DATABASE_URL")
 }
 
@@ -12,10 +12,12 @@ model User {
   telegramId    String    @unique
   firstName     String?
   username      String?
-  voiceToken    String?   @unique // личный токен для iOS Shortcut / Back Tap, не общий секрет
-  freeVoiceUsed   Int       @default(0) // сколько из 2 бесплатных голосовых уже использовано
-  subscriptionUntil DateTime? // null = нет активной подписки (кроме lifetime)
+  voiceToken    String?   @unique // personal token for iOS Shortcut / Back Tap, not a shared secret
+  freeVoiceUsed   Int       @default(0) // how many of the 2 free voice notes were used
+  subscriptionUntil DateTime? // null = no active subscription (except lifetime)
   isLifetime      Boolean   @default(false)
+  streakCount     Int       @default(0) // consecutive days with at least one meal logged
+  streakLastDay   String?              // last logged day as "YYYY-MM-DD" in Moscow time
   createdAt     DateTime  @default(now())
 
   reminders     Reminder[]
@@ -48,7 +50,7 @@ model Reminder {
   isDone    Boolean  @default(false)
   createdAt DateTime @default(now())
 
-  @@index([isDone, dueAt]) // именно по этой паре идёт запрос в cron каждую минуту
+  @@index([isDone, dueAt]) // the per-minute cron queries by this pair
   @@index([userId])
 }
 
