@@ -69,13 +69,24 @@ bot.command("voicetoken", async (ctx) => {
 });
 
 // Manual PRO activation: "/pro <code>" grants lifetime PRO if the code matches
-// the PRO_CODE env var. Share the code only with people you want to give PRO.
+// the PRO_CODE env var. Includes a temporary diagnostic on mismatch.
 bot.command("pro", async (ctx) => {
   const parts = ctx.message.text.trim().split(/\s+/);
-  const code = parts[1];
-  if (!process.env.PRO_CODE || code !== process.env.PRO_CODE) {
-    return ctx.reply("\u041d\u0435\u0432\u0435\u0440\u043d\u044b\u0439 \u043a\u043e\u0434 \u0430\u043a\u0442\u0438\u0432\u0430\u0446\u0438\u0438.");
+  const code = parts[1] || "";
+  const envSet = typeof process.env.PRO_CODE === "string" && process.env.PRO_CODE.length > 0;
+  const envLen = envSet ? process.env.PRO_CODE.length : 0;
+  const match = envSet && code === process.env.PRO_CODE;
+
+  if (!match) {
+    return ctx.reply(
+      "\u0414\u0438\u0430\u0433\u043d\u043e\u0441\u0442\u0438\u043a\u0430 \u0430\u043a\u0442\u0438\u0432\u0430\u0446\u0438\u0438:\n" +
+        "- PRO_CODE \u0437\u0430\u0434\u0430\u043d \u043d\u0430 \u0441\u0435\u0440\u0432\u0435\u0440\u0435: " + (envSet ? "\u0434\u0430" : "\u041d\u0415\u0422") + "\n" +
+        "- \u0434\u043b\u0438\u043d\u0430 \u043a\u043e\u0434\u0430 \u043d\u0430 \u0441\u0435\u0440\u0432\u0435\u0440\u0435: " + envLen + "\n" +
+        "- \u0434\u043b\u0438\u043d\u0430 \u0432\u0432\u0435\u0434\u0451\u043d\u043d\u043e\u0433\u043e \u043a\u043e\u0434\u0430: " + code.length + "\n" +
+        "- \u0441\u043e\u0432\u043f\u0430\u0434\u0430\u044e\u0442: " + (match ? "\u0434\u0430" : "\u043d\u0435\u0442")
+    );
   }
+
   const telegramId = String(ctx.from.id);
   const user = await prisma.user.findUnique({ where: { telegramId } });
   if (!user) return ctx.reply("\u0421\u043d\u0430\u0447\u0430\u043b\u0430 \u043d\u0430\u0436\u043c\u0438 /start, \u043f\u043e\u0442\u043e\u043c \u043e\u0442\u043f\u0440\u0430\u0432\u044c /pro \u0438 \u043a\u043e\u0434.");
