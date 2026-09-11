@@ -54,16 +54,21 @@ router.post("/", async (req, res) => {
   });
 
   // Update the streak: one point per day that has at least one logged meal (MSK days).
-  const now = new Date();
-  const today = mskDay(now);
-  const yest = mskDay(new Date(now.getTime() - 24 * 60 * 60 * 1000));
-  const user = await prisma.user.findUnique({ where: { id: req.user.id } });
-  if (user && user.streakLastDay !== today) {
-    const count = user.streakLastDay === yest ? (user.streakCount || 0) + 1 : 1;
-    await prisma.user.update({
-      where: { id: req.user.id },
-      data: { streakCount: count, streakLastDay: today },
-    });
+  // Non-fatal: never break saving the meal if the streak columns are missing.
+  try {
+    const now = new Date();
+    const today = mskDay(now);
+    const yest = mskDay(new Date(now.getTime() - 24 * 60 * 60 * 1000));
+    const user = await prisma.user.findUnique({ where: { id: req.user.id } });
+    if (user && user.streakLastDay !== today) {
+      const count = user.streakLastDay === yest ? (user.streakCount || 0) + 1 : 1;
+      await prisma.user.update({
+        where: { id: req.user.id },
+        data: { streakCount: count, streakLastDay: today },
+      });
+    }
+  } catch (e) {
+    console.error("streak update failed:", e.message);
   }
 
   res.json(meal);
