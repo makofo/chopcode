@@ -38,7 +38,25 @@ const S = {
   pS: "\u0411",
   fS: "\u0416",
   cS: "\u0423",
+  suffix: "\u043f\u043e\u0434\u0440\u044f\u0434",
+  streakStart: "\u041d\u0430\u0447\u043d\u0438 \u0441\u0435\u0440\u0438\u044e",
+  dayOne: "\u0434\u0435\u043d\u044c",
+  dayFew: "\u0434\u043d\u044f",
+  dayMany: "\u0434\u043d\u0435\u0439",
+  sub0: "\u041e\u0442\u043c\u0435\u0447\u0430\u0439 \u0435\u0434\u0443 \u043a\u0430\u0436\u0434\u044b\u0439 \u0434\u0435\u043d\u044c \u2014 \u0440\u0430\u0441\u0442\u0438 \u043e\u0433\u043e\u043d\u0451\u043a!",
+  subKeep: "\u0422\u0430\u043a \u0434\u0435\u0440\u0436\u0430\u0442\u044c, \u0442\u044b \u0441\u0435\u0433\u043e\u0434\u043d\u044f \u0432 \u0434\u0435\u043b\u0435! \ud83d\udcaa",
+  subToday: "\u041e\u0442\u043c\u0435\u0442\u044c \u0435\u0434\u0443 \u0441\u0435\u0433\u043e\u0434\u043d\u044f, \u0447\u0442\u043e\u0431\u044b \u043d\u0435 \u043f\u043e\u0442\u0435\u0440\u044f\u0442\u044c \u0441\u0435\u0440\u0438\u044e",
+  fire: "\ud83d\udd25",
 };
+
+function pluralDay(n) {
+  const a = Math.abs(n) % 100;
+  const b = n % 10;
+  if (a >= 11 && a <= 14) return S.dayMany;
+  if (b === 1) return S.dayOne;
+  if (b >= 2 && b <= 4) return S.dayFew;
+  return S.dayMany;
+}
 
 // Food database: kcal / protein / fat / carbs per 100 g
 const FOOD = [
@@ -115,6 +133,14 @@ const GRAM_PRESETS = [50, 100, 150, 200, 300];
 
 const CSS = `
 .kb-h { font-family:"Fredoka",sans-serif; font-weight:700; font-size:22px; margin:2px 4px 12px; color:var(--text); }
+.kb-streak { display:flex; align-items:center; gap:13px; background:linear-gradient(135deg,var(--card),var(--card2));
+  border:1px solid var(--line); border-radius:18px; padding:14px 16px; margin-bottom:14px; box-shadow:0 4px 14px var(--shadow); }
+.kb-fire { font-size:34px; line-height:1; filter:drop-shadow(0 0 10px var(--accentsoft)); }
+.kb-fire.off { filter:grayscale(1) opacity(.55); }
+.kb-streak-mid { flex:1; min-width:0; }
+.kb-streak-num { font-family:"Fredoka",sans-serif; font-weight:700; font-size:19px; color:var(--text); line-height:1.1; }
+.kb-streak-num b { color:var(--accent); font-size:23px; }
+.kb-streak-sub { font-size:12.5px; color:var(--muted); margin-top:2px; }
 .kb-card { background:var(--card); border:1px solid var(--line); border-radius:20px; padding:14px; box-shadow:0 4px 14px var(--shadow); margin-bottom:14px; }
 .kb-ct { font-family:"Fredoka",sans-serif; font-weight:600; font-size:16px; margin:0 0 10px; color:var(--text); }
 
@@ -176,7 +202,7 @@ const CSS = `
 `;
 
 export default function KBJU() {
-  const [data, setData] = useState({ meals: [], totals: { calories: 0, protein: 0, fat: 0, carbs: 0 } });
+  const [data, setData] = useState({ meals: [], totals: { calories: 0, protein: 0, fat: 0, carbs: 0 }, streak: { count: 0, loggedToday: false } });
   const [profileData, setProfileData] = useState({ profile: null, targets: null });
   const [editingProfile, setEditingProfile] = useState(false);
 
@@ -247,6 +273,23 @@ export default function KBJU() {
     <div>
       <style>{CSS}</style>
       <div className="kb-h">{S.title}</div>
+
+      {(() => {
+        const st = data.streak || { count: 0, loggedToday: false };
+        const n = st.count || 0;
+        const numText =
+          n > 0 ? [<b key="b">{n}</b>, " " + pluralDay(n) + " " + S.suffix] : S.streakStart;
+        const sub = n === 0 ? S.sub0 : st.loggedToday ? S.subKeep : S.subToday;
+        return (
+          <div className="kb-streak">
+            <div className={"kb-fire" + (n === 0 ? " off" : "")}>{S.fire}</div>
+            <div className="kb-streak-mid">
+              <div className="kb-streak-num">{numText}</div>
+              <div className="kb-streak-sub">{sub}</div>
+            </div>
+          </div>
+        );
+      })()}
 
       {(!profileData.profile || editingProfile) && (
         <ProfileForm initial={profileData.profile} onSaved={onProfileSaved} />
