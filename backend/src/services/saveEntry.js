@@ -10,6 +10,28 @@ function mskWallToUtc(s) {
   return new Date(Date.UTC(+Y, +Mo - 1, +D, +H - 3, +Mi, +(S || 0)));
 }
 
+// Day string "YYYY-MM-DD" in Moscow time (UTC+3).
+function mskDayStr(date) {
+  return new Date(date.getTime() + 3 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
+
+// Bumps the meal-logging streak (same rule as the KBJU tab), so meals added by
+// voice also light the streak. Non-fatal: never breaks saving the entry.
+async function bumpStreak(userId) {
+  try {
+    const now = new Date();
+    const today = mskDayStr(now);
+    const yest = mskDayStr(new Date(now.getTime() - 24 * 60 * 60 * 1000));
+    const u = await prisma.user.findUnique({ where: { id: userId } });
+    if (u && u.streakLastDay !== today) {
+      const count = u.streakLastDay === yest ? (u.streakCount || 0) + 1 : 1;
+      await prisma.user.update({ where: { id: userId }, data: { streakCount: count, streakLastDay: today } });
+    }
+  } catch (e) {
+    console.error("streak bump failed:", e.message);
+  }
+}
+
 // Saves a structured entry (result of classifyText) into the right table.
 // Returns { type, saved, human } - human is a short description for the reply.
 export async function saveClassifiedEntry(userId, classified) {
@@ -66,6 +88,7 @@ export async function saveClassifiedEntry(userId, classified) {
           carbs: Number(data.carbs) || 0,
         },
       });
+      await bumpStreak(userId);
       return {
         type,
         saved,
