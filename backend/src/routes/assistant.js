@@ -4,6 +4,7 @@ import { transcribeAudio } from "../services/transcribe.js";
 import { classifyText } from "../services/classify.js";
 import { saveClassifiedEntry } from "../services/saveEntry.js";
 import { checkVoiceAccess } from "../services/voiceQuota.js";
+import { chatWithChop } from "../services/chatWithChop.js";
 import { getPlansWithSavings } from "../pricing.js";
 
 const upload = multer({
@@ -68,10 +69,15 @@ router.post("/process-audio", upload.single("audio"), async (req, res) => {
 });
 
 router.post("/ask", async (req, res) => {
-  const { question } = req.body;
-  res.json({
-    answer: `\u0412\u043e\u043f\u0440\u043e\u0441\u044b \u043f\u043e \u0437\u0430\u043f\u0438\u0441\u044f\u043c \u043f\u043e\u043a\u0430 \u043d\u0435 \u043f\u043e\u0434\u043a\u043b\u044e\u0447\u0435\u043d\u044b. \u0422\u0432\u043e\u0439 \u0432\u043e\u043f\u0440\u043e\u0441: "${question}".`,
-  });
+  try {
+    const { question } = req.body;
+    if (!question) return res.status(400).json({ error: "question \u043e\u0431\u044f\u0437\u0430\u0442\u0435\u043b\u0435\u043d" });
+    const answer = await chatWithChop(req.user.id, question);
+    res.json({ answer });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ answer: "\u041e\u0439, \u043d\u0435 \u0441\u043c\u043e\u0433 \u043e\u0442\u0432\u0435\u0442\u0438\u0442\u044c \u0441\u0435\u0439\u0447\u0430\u0441, \u043f\u043e\u043f\u0440\u043e\u0431\u0443\u0439 \u0435\u0449\u0451 \u0440\u0430\u0437 \u0447\u0443\u0442\u044c \u043f\u043e\u0437\u0436\u0435." });
+  }
 });
 
 export default router;
