@@ -1,7 +1,12 @@
 import crypto from "crypto";
 import { Telegraf, Markup } from "telegraf";
+import { message } from "telegraf/filters";
 import cron from "node-cron";
 import { prisma } from "./telegramAuth.js";
+import { transcribeAudio } from "./services/transcribe.js";
+import { classifyText } from "./services/classify.js";
+import { saveClassifiedEntry } from "./services/saveEntry.js";
+import { checkVoiceAccess } from "./services/voiceQuota.js";
 
 export const bot = new Telegraf(process.env.BOT_TOKEN);
 
@@ -69,30 +74,73 @@ bot.command("voicetoken", async (ctx) => {
 });
 
 // Manual PRO activation: "/pro <code>" grants lifetime PRO if the code matches
-// the PRO_CODE env var. Includes a temporary diagnostic on mismatch.
+// the PRO_CODE env var.
 bot.command("pro", async (ctx) => {
   const parts = ctx.message.text.trim().split(/\s+/);
   const code = parts[1] || "";
-  const envSet = typeof process.env.PRO_CODE === "string" && process.env.PRO_CODE.length > 0;
-  const envLen = envSet ? process.env.PRO_CODE.length : 0;
-  const match = envSet && code === process.env.PRO_CODE;
-
-  if (!match) {
-    return ctx.reply(
-      "\u0414\u0438\u0430\u0433\u043d\u043e\u0441\u0442\u0438\u043a\u0430 \u0430\u043a\u0442\u0438\u0432\u0430\u0446\u0438\u0438:\n" +
-        "- PRO_CODE \u0437\u0430\u0434\u0430\u043d \u043d\u0430 \u0441\u0435\u0440\u0432\u0435\u0440\u0435: " + (envSet ? "\u0434\u0430" : "\u041d\u0415\u0422") + "\n" +
-        "- \u0434\u043b\u0438\u043d\u0430 \u043a\u043e\u0434\u0430 \u043d\u0430 \u0441\u0435\u0440\u0432\u0435\u0440\u0435: " + envLen + "\n" +
-        "- \u0434\u043b\u0438\u043d\u0430 \u0432\u0432\u0435\u0434\u0451\u043d\u043d\u043e\u0433\u043e \u043a\u043e\u0434\u0430: " + code.length + "\n" +
-        "- \u0441\u043e\u0432\u043f\u0430\u0434\u0430\u044e\u0442: " + (match ? "\u0434\u0430" : "\u043d\u0435\u0442")
-    );
+  if (!process.env.PRO_CODE || code !== process.env.PRO_CODE) {
+    return ctx.reply("\u041d\u0435\u0432\u0435\u0440\u043d\u044b\u0439 \u043a\u043e\u0434 \u0430\u043a\u0442\u0438\u0432\u0430\u0446\u0438\u0438.");
   }
-
   const telegramId = String(ctx.from.id);
   const user = await prisma.user.findUnique({ where: { telegramId } });
   if (!user) return ctx.reply("\u0421\u043d\u0430\u0447\u0430\u043b\u0430 \u043d\u0430\u0436\u043c\u0438 /start, \u043f\u043e\u0442\u043e\u043c \u043e\u0442\u043f\u0440\u0430\u0432\u044c /pro \u0438 \u043a\u043e\u0434.");
   await prisma.user.update({ where: { id: user.id }, data: { isLifetime: true } });
   await ctx.reply("\u0413\u043e\u0442\u043e\u0432\u043e! PRO \u0430\u043a\u0442\u0438\u0432\u0438\u0440\u043e\u0432\u0430\u043d \u043d\u0430\u0432\u0441\u0435\u0433\u0434\u0430 \ud83d\udc08\u200d\u2b1b\u2764\ufe0f \u041e\u0442\u043a\u0440\u043e\u0439 \u0427\u043e\u043f\u0430 \u2014 \u0432\u0441\u0435 \u0444\u0443\u043d\u043a\u0446\u0438\u0438 \u0431\u0435\u0437 \u043e\u0433\u0440\u0430\u043d\u0438\u0447\u0435\u043d\u0438\u0439.");
 });
+
+// Handles a voice/audio message sent straight to the bot chat: download the audio,
+// transcribe it (Groq Whisper), classify it (may be several items), save each,
+// and reply with what was recognized and where it went.
+async function handleVoiceMessage(ctx, fileId) {
+  const telegramId = String(ctx.from.id);
+  let user = await prisma.user.findUnique({ where: { telegramId } });
+  if (!user) {
+    user = await prisma.user.create({
+      data: {
+        telegramId,
+        firstName: ctx.from.first_name,
+        username: ctx.from.username,
+        voiceToken: crypto.randomBytes(24).toString("hex"),
+      },
+    });
+  }
+
+  const access = await checkVoiceAccess(user.id);
+  if (!access.allowed) {
+    return ctx.reply(
+      "\u0411\u0435\u0441\u043f\u043b\u0430\u0442\u043d\u044b\u0435 \u0433\u043e\u043b\u043e\u0441\u043e\u0432\u044b\u0435 \u0437\u0430\u043a\u043e\u043d\u0447\u0438\u043b\u0438\u0441\u044c \ud83d\ude42 \u041e\u0442\u043a\u0440\u043e\u0439 \u0427\u043e\u043f\u0430 \u0438 \u043e\u0444\u043e\u0440\u043c\u0438 PRO, \u0447\u0442\u043e\u0431\u044b \u043f\u0440\u043e\u0434\u043e\u043b\u0436\u0438\u0442\u044c \u0431\u0435\u0437 \u043e\u0433\u0440\u0430\u043d\u0438\u0447\u0435\u043d\u0438\u0439."
+    );
+  }
+
+  await ctx.sendChatAction("typing");
+  const link = await ctx.telegram.getFileLink(fileId);
+  const resp = await fetch(link.href);
+  const buffer = Buffer.from(await resp.arrayBuffer());
+
+  const text = await transcribeAudio(buffer, "voice.ogg");
+  const items = await classifyText(text);
+  const results = [];
+  for (const it of items) {
+    results.push(await saveClassifiedEntry(user.id, it));
+  }
+  const humanAll = results.map((r) => r.human).join("\n");
+
+  await ctx.reply(`\ud83c\udf99 \u0420\u0430\u0441\u043f\u043e\u0437\u043d\u0430\u043b: \u00ab${text}\u00bb\n\n${humanAll}`);
+}
+
+bot.on(message("voice"), (ctx) =>
+  handleVoiceMessage(ctx, ctx.message.voice.file_id).catch(async (e) => {
+    console.error("voice message error:", e.message);
+    await ctx.reply("\u041d\u0435 \u043f\u043e\u043b\u0443\u0447\u0438\u043b\u043e\u0441\u044c \u043e\u0431\u0440\u0430\u0431\u043e\u0442\u0430\u0442\u044c \u0433\u043e\u043b\u043e\u0441\u043e\u0432\u043e\u0435, \u043f\u043e\u043f\u0440\u043e\u0431\u0443\u0439 \u0435\u0449\u0451 \u0440\u0430\u0437.");
+  })
+);
+
+bot.on(message("audio"), (ctx) =>
+  handleVoiceMessage(ctx, ctx.message.audio.file_id).catch(async (e) => {
+    console.error("audio message error:", e.message);
+    await ctx.reply("\u041d\u0435 \u043f\u043e\u043b\u0443\u0447\u0438\u043b\u043e\u0441\u044c \u043e\u0431\u0440\u0430\u0431\u043e\u0442\u0430\u0442\u044c \u0430\u0443\u0434\u0438\u043e, \u043f\u043e\u043f\u0440\u043e\u0431\u0443\u0439 \u0435\u0449\u0451 \u0440\u0430\u0437.");
+  })
+);
 
 // --- Simple send throttler: at most ~25 messages/sec total,
 // to stay under Telegram limits during mass reminder sends.
