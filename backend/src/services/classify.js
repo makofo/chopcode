@@ -1,7 +1,11 @@
 // Splits free-form text (from voice or typing) into ONE OR MORE structured
 // entries for the tabs: reminder | transaction | meal | diary.
 // One message may contain several separate things at once, so this returns an ARRAY.
-// Uses Groq's OpenAI-compatible chat API (Llama 3.3, free tier) in JSON mode.
+// Uses Groq's OpenAI-compatible chat API (free tier) in JSON mode.
+// Tries several models in order (in case one is not available on the account),
+// so a single unavailable model does not break classification.
+
+const MODELS = ["openai/gpt-oss-20b", "llama-3.1-8b-instant", "openai/gpt-oss-120b"];
 
 const SYSTEM_PROMPT = `\u0422\u044b \u2014 \u043c\u043e\u0434\u0443\u043b\u044c \u0440\u0430\u0437\u0431\u043e\u0440\u0430 \u0434\u043b\u044f \u043f\u0440\u0438\u043b\u043e\u0436\u0435\u043d\u0438\u044f-\u043e\u0440\u0433\u0430\u043d\u0430\u0439\u0437\u0435\u0440\u0430.
 \u041f\u043e\u043b\u044c\u0437\u043e\u0432\u0430\u0442\u0435\u043b\u044c \u043d\u0430\u0433\u043e\u0432\u043e\u0440\u0438\u043b \u0438\u043b\u0438 \u043d\u0430\u043f\u0438\u0441\u0430\u043b \u0441\u043e\u043e\u0431\u0449\u0435\u043d\u0438\u0435 (\u043d\u0430 \u0440\u0443\u0441\u0441\u043a\u043e\u043c). \u0412 \u041e\u0414\u041d\u041e\u041c \u0441\u043e\u043e\u0431\u0449\u0435\u043d\u0438\u0438 \u043c\u043e\u0436\u0435\u0442 \u0431\u044b\u0442\u044c \u041d\u0415\u0421\u041a\u041e\u041b\u042c\u041a\u041e \u0440\u0430\u0437\u043d\u044b\u0445 \u0434\u0435\u043b \u0441\u0440\u0430\u0437\u0443 \u2014 \u0440\u0430\u0437\u0434\u0435\u043b\u0438 \u0435\u0433\u043e \u043d\u0430 \u043e\u0442\u0434\u0435\u043b\u044c\u043d\u044b\u0435 \u0437\u0430\u043f\u0438\u0441\u0438 \u0438 \u043e\u043f\u0440\u0435\u0434\u0435\u043b\u0438 \u043a\u0430\u0442\u0435\u0433\u043e\u0440\u0438\u044e \u043a\u0430\u0436\u0434\u043e\u0439.
@@ -30,42 +34,9 @@ mood \u2014 \u0442\u043e\u043b\u044c\u043a\u043e \u0435\u0441\u043b\u0438 \u043d
 - \u0415\u0441\u043b\u0438 \u0432 \u0441\u043e\u043e\u0431\u0449\u0435\u043d\u0438\u0438 \u043d\u0435\u0442 \u043d\u0438\u0447\u0435\u0433\u043e \u043a\u043e\u043d\u043a\u0440\u0435\u0442\u043d\u043e\u0433\u043e \u2014 \u0432\u0435\u0440\u043d\u0438 \u043e\u0434\u0438\u043d \u044d\u043b\u0435\u043c\u0435\u043d\u0442 diary \u0441 \u0438\u0441\u0445\u043e\u0434\u043d\u044b\u043c \u0442\u0435\u043a\u0441\u0442\u043e\u043c.
 - \u041d\u0435 \u0432\u044b\u0434\u0443\u043c\u044b\u0432\u0430\u0439 \u043b\u0438\u0448\u043d\u0438\u0445 \u0437\u0430\u043f\u0438\u0441\u0435\u0439. \u041e\u0442\u0432\u0435\u0447\u0430\u0439 \u0441\u0442\u0440\u043e\u0433\u043e JSON-\u043e\u0431\u044a\u0435\u043a\u0442\u043e\u043c {"items":[...]}, \u0431\u0435\u0437 markdown \u0438 \u043f\u043e\u044f\u0441\u043d\u0435\u043d\u0438\u0439.`;
 
-export async function classifyText(text) {
-  const apiKey = process.env.GROQ_API_KEY;
-  if (!apiKey) {
-    throw new Error("GROQ_API_KEY is not set - AI classification is not configured");
-  }
-
-  const now = new Date().toISOString();
-  const systemPrompt = SYSTEM_PROMPT.replace("{{NOW}}", now);
-
-  const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: "llama-3.3-70b-versatile",
-      temperature: 0,
-      response_format: { type: "json_object" },
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: text },
-      ],
-    }),
-  });
-
-  if (!res.ok) {
-    const errText = await res.text();
-    throw new Error(`Groq LLM error: ${res.status} ${errText}`);
-  }
-
-  const data = await res.json();
-  const raw = data.choices?.[0]?.message?.content ?? "{}";
-  const clean = raw.replace(/```json|```/g, "").trim();
-
+function parseItems(raw, text) {
   const fallback = [{ type: "diary", data: { text, mood: null } }];
+  const clean = String(raw || "").replace(/```json|```/g, "").trim();
   try {
     const parsed = JSON.parse(clean);
     let items = Array.isArray(parsed) ? parsed : parsed.items;
@@ -75,4 +46,47 @@ export async function classifyText(text) {
   } catch {
     return fallback;
   }
+}
+
+export async function classifyText(text) {
+  const apiKey = process.env.GROQ_API_KEY;
+  if (!apiKey) {
+    throw new Error("GROQ_API_KEY is not set - AI classification is not configured");
+  }
+
+  const now = new Date().toISOString();
+  const systemPrompt = SYSTEM_PROMPT.replace("{{NOW}}", now);
+
+  let lastErr = "";
+  for (const model of MODELS) {
+    const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model,
+        temperature: 0,
+        response_format: { type: "json_object" },
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: text },
+        ],
+      }),
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      const raw = data.choices?.[0]?.message?.content ?? "{}";
+      return parseItems(raw, text);
+    }
+
+    lastErr = res.status + " " + (await res.text());
+    // 404/400 usually means "model not available" - try the next model.
+    // Other errors (401 key, 429 rate limit) won't be fixed by switching models.
+    if (res.status !== 404 && res.status !== 400) break;
+  }
+
+  throw new Error(`Groq LLM error: ${lastErr}`);
 }
