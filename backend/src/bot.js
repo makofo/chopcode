@@ -5,9 +5,28 @@ import { prisma } from "./telegramAuth.js";
 
 export const bot = new Telegraf(process.env.BOT_TOKEN);
 
+// Sets the persistent menu button (next to the chat input) for one specific chat.
+// Called on /start so the button appears immediately for that user, even if the
+// global default has not refreshed in an already-open chat.
+async function setMenuButtonForChat(ctx) {
+  if (!process.env.WEBAPP_URL) return;
+  try {
+    await ctx.telegram.callApi("setChatMenuButton", {
+      chat_id: ctx.chat.id,
+      menu_button: {
+        type: "web_app",
+        text: "\u041e\u0442\u043a\u0440\u044b\u0442\u044c \u0427\u043e\u043f\u0430",
+        web_app: { url: process.env.WEBAPP_URL },
+      },
+    });
+  } catch (e) {
+    console.error("Failed to set menu button (start):", e.message);
+  }
+}
+
 bot.start(async (ctx) => {
-  // Генерируем личный voice-токен один раз при первом /start —
-  // именно его пользователь пропишет в своём iOS Shortcut (Back Tap).
+  // Generate a personal voice token once on first /start -
+  // the user pastes it into their iOS Shortcut (Back Tap).
   const telegramId = String(ctx.from.id);
   let user = await prisma.user.findUnique({ where: { telegramId } });
 
@@ -27,28 +46,30 @@ bot.start(async (ctx) => {
     });
   }
 
+  await setMenuButtonForChat(ctx);
+
   await ctx.reply(
-    "Привет! Я твой помощник: напоминания, финансы, КБЖУ и дневник в одном месте.",
+    "\u041f\u0440\u0438\u0432\u0435\u0442! \u042f \u0427\u043e\u043f \ud83d\udc08\u200d\u2b1b \u041f\u043e\u043c\u043e\u0433\u0443 \u0441 \u043d\u0430\u043f\u043e\u043c\u0438\u043d\u0430\u043d\u0438\u044f\u043c\u0438, \u0444\u0438\u043d\u0430\u043d\u0441\u0430\u043c\u0438, \u041a\u0411\u0416\u0423 \u0438 \u0434\u043d\u0435\u0432\u043d\u0438\u043a\u043e\u043c \u2014 \u0432\u0441\u0451 \u0432 \u043e\u0434\u043d\u043e\u043c \u043c\u0435\u0441\u0442\u0435. \u0416\u043c\u0438 \u043a\u043d\u043e\u043f\u043a\u0443 \u043d\u0438\u0436\u0435 \u0438\u043b\u0438 \u00ab\u041e\u0442\u043a\u0440\u044b\u0442\u044c \u0427\u043e\u043f\u0430\u00bb \u0440\u044f\u0434\u043e\u043c \u0441 \u043f\u043e\u043b\u0435\u043c \u0432\u0432\u043e\u0434\u0430.",
     Markup.inlineKeyboard([
-      Markup.button.webApp("📱 Открыть приложение", process.env.WEBAPP_URL),
+      Markup.button.webApp("\ud83d\udc08\u200d\u2b1b \u041e\u0442\u043a\u0440\u044b\u0442\u044c \u0427\u043e\u043f\u0430", process.env.WEBAPP_URL),
     ])
   );
 });
 
-// Команда, чтобы пользователь мог получить свой личный voice-токен для Shortcut
+// Command to get the personal voice token for the iOS Shortcut
 bot.command("voicetoken", async (ctx) => {
   const telegramId = String(ctx.from.id);
   const user = await prisma.user.findUnique({ where: { telegramId } });
   if (!user?.voiceToken) {
-    return ctx.reply("Сначала нажми /start, чтобы получить личный токен.");
+    return ctx.reply("\u0421\u043d\u0430\u0447\u0430\u043b\u0430 \u043d\u0430\u0436\u043c\u0438 /start, \u0447\u0442\u043e\u0431\u044b \u043f\u043e\u043b\u0443\u0447\u0438\u0442\u044c \u043b\u0438\u0447\u043d\u044b\u0439 \u0442\u043e\u043a\u0435\u043d.");
   }
   await ctx.reply(
-    `Твой личный токен для Back Tap Shortcut (никому его не давай):\n\n${user.voiceToken}`
+    `\u0422\u0432\u043e\u0439 \u043b\u0438\u0447\u043d\u044b\u0439 \u0442\u043e\u043a\u0435\u043d \u0434\u043b\u044f Back Tap Shortcut (\u043d\u0438\u043a\u043e\u043c\u0443 \u0435\u0433\u043e \u043d\u0435 \u0434\u0430\u0432\u0430\u0439):\n\n${user.voiceToken}`
   );
 });
 
-// --- Простой троттлер отправки: не более ~25 сообщений в секунду суммарно,
-// чтобы не упереться в лимит Telegram при массовой рассылке напоминаний.
+// --- Simple send throttler: at most ~25 messages/sec total,
+// to stay under Telegram limits during mass reminder sends.
 const SEND_INTERVAL_MS = 40; // ~25 msg/sec
 let queue = Promise.resolve();
 
@@ -56,24 +77,22 @@ function throttledSend(telegramId, text) {
   queue = queue
     .then(() => new Promise((resolve) => setTimeout(resolve, SEND_INTERVAL_MS)))
     .then(() => bot.telegram.sendMessage(telegramId, text))
-    .catch((e) => console.error("Не удалось отправить напоминание", telegramId, e.message));
+    .catch((e) => console.error("Failed to send reminder", telegramId, e.message));
   return queue;
 }
 
-// Раз в минуту проверяем, какие напоминания пора отправить.
-// При росте базы пользователей этот cron стоит вынести в отдельный воркер-процесс,
-// а таблицу Reminder — читать пачками (batch), не выгружая всё разом.
+// Every minute: check which reminders are due and send them.
 export function startReminderCron() {
   cron.schedule("* * * * *", async () => {
     const now = new Date();
     const due = await prisma.reminder.findMany({
       where: { isDone: false, dueAt: { lte: now } },
       include: { user: true },
-      take: 500, // защита от одномоментного огромного выброса
+      take: 500,
     });
 
     for (const r of due) {
-      throttledSend(r.user.telegramId, `⏰ Напоминание: ${r.text}`);
+      throttledSend(r.user.telegramId, `\u23f0 \u041d\u0430\u043f\u043e\u043c\u0438\u043d\u0430\u043d\u0438\u0435: ${r.text}`);
 
       if (r.repeat === "daily") {
         const next = new Date(r.dueAt);
