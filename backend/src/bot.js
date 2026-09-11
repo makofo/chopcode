@@ -7,6 +7,7 @@ import { transcribeAudio } from "./services/transcribe.js";
 import { classifyText } from "./services/classify.js";
 import { saveClassifiedEntry } from "./services/saveEntry.js";
 import { checkVoiceAccess } from "./services/voiceQuota.js";
+import { warmReminder, hourNudge, morningDigest, eveningMotivation } from "./services/chopNotify.js";
 
 export const bot = new Telegraf(process.env.BOT_TOKEN);
 
@@ -155,30 +156,110 @@ function throttledSend(telegramId, text) {
   return queue;
 }
 
-// Every minute: check which reminders are due and send them.
+// --- Moscow-time helpers (server runs in UTC) ---
+function mskDayStr(d) {
+  return new Date(d.getTime() + 3 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
+function mskHm(d) {
+  return new Date(d.getTime() + 3 * 60 * 60 * 1000).toISOString().slice(11, 16);
+}
+// UTC instant of the end of "today" in Moscow time.
+function endOfMskDayUtc(now) {
+  const day = mskDayStr(now); // YYYY-MM-DD
+  const [Y, M, D] = day.split("-").map(Number);
+  // 24:00 MSK == 21:00 UTC same date
+  return new Date(Date.UTC(Y, M - 1, D, 21, 0, 0));
+}
+
+// Morning digest (~10:00 MSK): warm summary of today's remaining reminders.
+async function sendMorningDigests() {
+  const now = new Date();
+  const dayEnd = endOfMskDayUtc(now);
+  const users = await prisma.user.findMany();
+  for (const u of users) {
+    const items = await prisma.reminder.findMany({
+      where: { userId: u.id, isDone: false, dueAt: { gte: now, lt: dayEnd } },
+      orderBy: { dueAt: "asc" },
+      take: 10,
+    });
+    if (!items.length) continue;
+    const lines = items.map((r) => `${mskHm(r.dueAt)} \u2014 ${r.text}`);
+    const text = await morningDigest(lines, u.firstName || "");
+    throttledSend(u.telegramId, text);
+  }
+}
+
+// Evening motivation (~20:00 MSK): calories result + streak, only for users active today.
+async function sendEveningMotivation() {
+  const now = new Date();
+  const today = mskDayStr(now);
+  const yest = mskDayStr(new Date(now.getTime() - 24 * 60 * 60 * 1000));
+  const users = await prisma.user.findMany();
+  for (const u of users) {
+    const meals = await prisma.meal.findMany({
+      where: { userId: u.id },
+      orderBy: { eatenAt: "desc" },
+      take: 40,
+    });
+    const todayMeals = meals.filter((m) => mskDayStr(new Date(m.eatenAt)) === today);
+    const alive = u.streakLastDay === today || u.streakLastDay === yest;
+    const streak = alive ? u.streakCount || 0 : 0;
+    if (!todayMeals.length && !streak) continue; // don't ping inactive users
+    const kcal = Math.round(todayMeals.reduce((s, m) => s + m.calories, 0));
+    const summary = `\u0441\u0435\u0433\u043e\u0434\u043d\u044f \u0437\u0430\u043f\u0438\u0441\u0430\u043d\u043e ${kcal} \u043a\u043a\u0430\u043b \u0437\u0430 ${todayMeals.length} \u043f\u0440\u0438\u0451\u043c(\u043e\u0432), \u0441\u0435\u0440\u0438\u044f ${streak} \u0434\u043d.`;
+    const text = await eveningMotivation(summary);
+    throttledSend(u.telegramId, text);
+  }
+}
+
+// Every minute: fire due reminders (warm) and send "1 hour before" nudges.
 export function startReminderCron() {
   cron.schedule("* * * * *", async () => {
     const now = new Date();
+
     const due = await prisma.reminder.findMany({
       where: { isDone: false, dueAt: { lte: now } },
       include: { user: true },
-      take: 500,
+      take: 200,
     });
-
     for (const r of due) {
-      throttledSend(r.user.telegramId, `\u23f0 \u041d\u0430\u043f\u043e\u043c\u0438\u043d\u0430\u043d\u0438\u0435: ${r.text}`);
+      const text = await warmReminder(r.text);
+      throttledSend(r.user.telegramId, text);
 
       if (r.repeat === "daily") {
         const next = new Date(r.dueAt);
         next.setDate(next.getDate() + 1);
-        await prisma.reminder.update({ where: { id: r.id }, data: { dueAt: next } });
+        await prisma.reminder.update({ where: { id: r.id }, data: { dueAt: next, preNotified: false } });
       } else if (r.repeat === "weekly") {
         const next = new Date(r.dueAt);
         next.setDate(next.getDate() + 7);
-        await prisma.reminder.update({ where: { id: r.id }, data: { dueAt: next } });
+        await prisma.reminder.update({ where: { id: r.id }, data: { dueAt: next, preNotified: false } });
       } else {
         await prisma.reminder.update({ where: { id: r.id }, data: { isDone: true } });
       }
     }
+
+    // "1 hour before" nudge (once per reminder)
+    const soon = new Date(now.getTime() + 60 * 60 * 1000);
+    const upcoming = await prisma.reminder.findMany({
+      where: { isDone: false, preNotified: false, dueAt: { gt: now, lte: soon } },
+      include: { user: true },
+      take: 200,
+    });
+    for (const r of upcoming) {
+      const text = await hourNudge(r.text);
+      throttledSend(r.user.telegramId, text);
+      await prisma.reminder.update({ where: { id: r.id }, data: { preNotified: true } });
+    }
+  });
+
+  // Morning digest at 10:00 Moscow time
+  cron.schedule("0 10 * * *", () => sendMorningDigests().catch((e) => console.error("morning digest error:", e.message)), {
+    timezone: "Europe/Moscow",
+  });
+
+  // Evening motivation at 20:00 Moscow time
+  cron.schedule("0 20 * * *", () => sendEveningMotivation().catch((e) => console.error("evening motivation error:", e.message)), {
+    timezone: "Europe/Moscow",
   });
 }
