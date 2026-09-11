@@ -1,19 +1,19 @@
-// Распознавание речи в текст через Whisper API.
-// Claude API не принимает аудио напрямую, поэтому этот шаг делаем отдельным сервисом.
-// Нужен OPENAI_API_KEY в .env. Если появится другой провайдер STT — меняем только этот файл.
+// Speech-to-text via Groq's Whisper endpoint (OpenAI-compatible, free tier).
+// Needs GROQ_API_KEY in the environment. If the STT provider ever changes,
+// only this file needs to be edited.
 
 export async function transcribeAudio(buffer, filename = "audio.ogg") {
-  const apiKey = process.env.OPENAI_API_KEY;
+  const apiKey = process.env.GROQ_API_KEY;
   if (!apiKey) {
-    throw new Error("OPENAI_API_KEY не задан — распознавание речи не настроено");
+    throw new Error("GROQ_API_KEY is not set - speech recognition is not configured");
   }
 
   const form = new FormData();
   form.append("file", new Blob([buffer]), filename);
-  form.append("model", "whisper-1");
+  form.append("model", "whisper-large-v3-turbo"); // fast + cheap Whisper model on Groq
   form.append("language", "ru");
 
-  const res = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+  const res = await fetch("https://api.groq.com/openai/v1/audio/transcriptions", {
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}` },
     body: form,
@@ -21,7 +21,7 @@ export async function transcribeAudio(buffer, filename = "audio.ogg") {
 
   if (!res.ok) {
     const errText = await res.text();
-    throw new Error(`Whisper API error: ${res.status} ${errText}`);
+    throw new Error(`Groq Whisper error: ${res.status} ${errText}`);
   }
 
   const data = await res.json();
