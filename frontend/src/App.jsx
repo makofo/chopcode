@@ -179,17 +179,13 @@ function Premium({ onClose }) {
             </div>
           </div>
         ))}
-        <button className="prem-pay" onClick={pay}>
-          {T.checkout}{current ? " \u00b7 " + current.price + " " + T.rub : ""}
-        </button>
-        <div className="prem-note">{T.payNote}</div>
         <div
           style={{
-            marginTop: 10,
+            margin: "2px 0 10px",
             textAlign: "center",
             fontSize: 11,
             lineHeight: 1.7,
-            opacity: 0.6,
+            opacity: 0.65,
           }}
         >
           {DOCS.map(([label, url], i) => (
@@ -204,6 +200,10 @@ function Premium({ onClose }) {
             </span>
           ))}
         </div>
+        <button className="prem-pay" onClick={pay}>
+          {T.checkout}{current ? " \u00b7 " + current.price + " " + T.rub : ""}
+        </button>
+        <div className="prem-note">{T.payNote}</div>
       </div>
     </div>
   );
