@@ -20,6 +20,16 @@ const GOAL_ADJUSTMENT = {
 export function calculateTargets(profile) {
   const { gender, age, heightCm, weightKg, activity, goal } = profile;
 
+  // "Свой режим": пользователь задал нормы вручную — берём их как есть.
+  if (goal === "custom") {
+    return {
+      calories: profile.customCalories ?? 0,
+      protein: profile.customProtein ?? 0,
+      fat: profile.customFat ?? 0,
+      carbs: profile.customCarbs ?? 0,
+    };
+  }
+
   const bmr =
     gender === "male"
       ? 10 * weightKg + 6.25 * heightCm - 5 * age + 5
