@@ -10,6 +10,15 @@ function mskDay(date) {
   return t.toISOString().slice(0, 10);
 }
 
+// Given a Moscow calendar day "YYYY-MM-DD", returns the matching UTC time window
+// [start, end). Moscow midnight is 21:00 UTC of the previous day.
+function mskDayWindowUtc(dayStr) {
+  const [Y, M, D] = dayStr.split("-").map(Number);
+  const start = new Date(Date.UTC(Y, M - 1, D, 0, 0, 0) - 3 * 60 * 60 * 1000);
+  const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
+  return { start, end };
+}
+
 // Streak to DISPLAY: alive if the last logged day is today or yesterday (MSK),
 // otherwise the streak is considered broken (0).
 function activeStreak(user) {
@@ -25,15 +34,16 @@ function activeStreak(user) {
 }
 
 router.get("/", async (req, res) => {
-  const { date } = req.query;
-  const where = { userId: req.user.id };
-  if (date) {
-    const start = new Date(date);
-    const end = new Date(date);
-    end.setDate(end.getDate() + 1);
-    where.eatenAt = { gte: start, lt: end };
-  }
-  const meals = await prisma.meal.findMany({ where, orderBy: { eatenAt: "desc" } });
+  // Default to TODAY in Moscow time, so the tab shows today's intake and resets
+  // each day. A ?date=YYYY-MM-DD query shows that Moscow day instead.
+  const day = req.query.date || mskDay(new Date());
+  const { start, end } = mskDayWindowUtc(day);
+
+  const meals = await prisma.meal.findMany({
+    where: { userId: req.user.id, eatenAt: { gte: start, lt: end } },
+    orderBy: { eatenAt: "desc" },
+  });
+
   const totals = meals.reduce(
     (acc, m) => ({
       calories: acc.calories + m.calories,
@@ -43,8 +53,9 @@ router.get("/", async (req, res) => {
     }),
     { calories: 0, protein: 0, fat: 0, carbs: 0 }
   );
+
   const user = await prisma.user.findUnique({ where: { id: req.user.id } });
-  res.json({ meals, totals, streak: activeStreak(user) });
+  res.json({ meals, totals, day, streak: activeStreak(user) });
 });
 
 router.post("/", async (req, res) => {
