@@ -37,6 +37,10 @@ model Profile {
   weightKg     Float
   activity     String
   goal         String
+  customCalories Int?   // used only when goal = "custom" (user sets targets by hand)
+  customProtein  Int?
+  customFat      Int?
+  customCarbs    Int?
   updatedAt    DateTime @updatedAt
 }
 
