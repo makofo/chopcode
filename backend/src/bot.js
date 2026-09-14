@@ -11,6 +11,10 @@ import { warmReminder, hourNudge, morningDigest, eveningMotivation } from "./ser
 
 export const bot = new Telegraf(process.env.BOT_TOKEN);
 
+// Where the illustrated guide images live (served from the frontend on Vercel).
+// Override with GUIDE_BASE env if the domain changes.
+const GUIDE_BASE = process.env.GUIDE_BASE || "https://chopcode.vercel.app";
+
 // Sets the persistent menu button (next to the chat input) for one specific chat.
 // Called on /start so the button appears immediately for that user, even if the
 // global default has not refreshed in an already-open chat.
@@ -21,7 +25,7 @@ async function setMenuButtonForChat(ctx) {
       chat_id: ctx.chat.id,
       menu_button: {
         type: "web_app",
-        text: "\u041e\u0442\u043a\u0440\u044b\u0442\u044c \u0427\u043e\u043f\u0430",
+        text: "Открыть Чопа",
         web_app: { url: process.env.WEBAPP_URL },
       },
     });
@@ -55,9 +59,9 @@ bot.start(async (ctx) => {
   await setMenuButtonForChat(ctx);
 
   await ctx.reply(
-    "\u041f\u0440\u0438\u0432\u0435\u0442! \u042f \u0427\u043e\u043f \ud83d\udc08\u200d\u2b1b \u041f\u043e\u043c\u043e\u0433\u0443 \u0441 \u043d\u0430\u043f\u043e\u043c\u0438\u043d\u0430\u043d\u0438\u044f\u043c\u0438, \u0444\u0438\u043d\u0430\u043d\u0441\u0430\u043c\u0438, \u041a\u0411\u0416\u0423 \u0438 \u0434\u043d\u0435\u0432\u043d\u0438\u043a\u043e\u043c \u2014 \u0432\u0441\u0451 \u0432 \u043e\u0434\u043d\u043e\u043c \u043c\u0435\u0441\u0442\u0435. \u0416\u043c\u0438 \u043a\u043d\u043e\u043f\u043a\u0443 \u043d\u0438\u0436\u0435 \u0438\u043b\u0438 \u00ab\u041e\u0442\u043a\u0440\u044b\u0442\u044c \u0427\u043e\u043f\u0430\u00bb \u0440\u044f\u0434\u043e\u043c \u0441 \u043f\u043e\u043b\u0435\u043c \u0432\u0432\u043e\u0434\u0430.\n\n\u041c\u043e\u0436\u0435\u0448\u044c \u043d\u0430\u0433\u043e\u0432\u0430\u0440\u0438\u0432\u0430\u0442\u044c \u043c\u043d\u0435 \u0433\u043e\u043b\u043e\u0441\u043e\u0432\u044b\u0435 \u043f\u0440\u044f\u043c\u043e \u0432 \u0447\u0430\u0442 \u2014 \u044f \u0432\u0441\u0451 \u0440\u0430\u0437\u043b\u043e\u0436\u0443. \u0410 \u0447\u0442\u043e\u0431\u044b \u0437\u0430\u043f\u0443\u0441\u043a\u0430\u0442\u044c \u043c\u0435\u043d\u044f \u0434\u0432\u043e\u0439\u043d\u044b\u043c \u043a\u0430\u0441\u0430\u043d\u0438\u0435\u043c \u043f\u043e iPhone \u2014 \u043e\u0442\u043f\u0440\u0430\u0432\u044c /iphone.",
+    "Привет! Я Чоп 🐈‍⬛ Помогу с напоминаниями, финансами, КБЖУ и дневником — всё в одном месте. Жми кнопку ниже или «Открыть Чопа» рядом с полем ввода.\n\nМожешь наговаривать мне голосовые прямо в чат — я всё разложу. А чтобы запускать меня двойным касанием по iPhone — отправь /setup (там вся инструкция с фото).",
     Markup.inlineKeyboard([
-      Markup.button.webApp("\ud83d\udc08\u200d\u2b1b \u041e\u0442\u043a\u0440\u044b\u0442\u044c \u0427\u043e\u043f\u0430", process.env.WEBAPP_URL),
+      Markup.button.webApp("🐈‍⬛ Открыть Чопа", process.env.WEBAPP_URL),
     ])
   );
 });
@@ -67,10 +71,10 @@ bot.command("voicetoken", async (ctx) => {
   const telegramId = String(ctx.from.id);
   const user = await prisma.user.findUnique({ where: { telegramId } });
   if (!user?.voiceToken) {
-    return ctx.reply("\u0421\u043d\u0430\u0447\u0430\u043b\u0430 \u043d\u0430\u0436\u043c\u0438 /start, \u0447\u0442\u043e\u0431\u044b \u043f\u043e\u043b\u0443\u0447\u0438\u0442\u044c \u043b\u0438\u0447\u043d\u044b\u0439 \u0442\u043e\u043a\u0435\u043d.");
+    return ctx.reply("Сначала нажми /start, чтобы получить личный токен.");
   }
   await ctx.reply(
-    `\u0422\u0432\u043e\u0439 \u043b\u0438\u0447\u043d\u044b\u0439 \u0442\u043e\u043a\u0435\u043d \u0434\u043b\u044f Back Tap Shortcut (\u043d\u0438\u043a\u043e\u043c\u0443 \u0435\u0433\u043e \u043d\u0435 \u0434\u0430\u0432\u0430\u0439):\n\n${user.voiceToken}`
+    `Твой личный токен для Back Tap Shortcut (никому его не давай):\n\n${user.voiceToken}`
   );
 });
 
@@ -80,42 +84,94 @@ bot.command("pro", async (ctx) => {
   const parts = ctx.message.text.trim().split(/\s+/);
   const code = parts[1] || "";
   if (!process.env.PRO_CODE || code !== process.env.PRO_CODE) {
-    return ctx.reply("\u041d\u0435\u0432\u0435\u0440\u043d\u044b\u0439 \u043a\u043e\u0434 \u0430\u043a\u0442\u0438\u0432\u0430\u0446\u0438\u0438.");
+    return ctx.reply("Неверный код активации.");
   }
   const telegramId = String(ctx.from.id);
   const user = await prisma.user.findUnique({ where: { telegramId } });
-  if (!user) return ctx.reply("\u0421\u043d\u0430\u0447\u0430\u043b\u0430 \u043d\u0430\u0436\u043c\u0438 /start, \u043f\u043e\u0442\u043e\u043c \u043e\u0442\u043f\u0440\u0430\u0432\u044c /pro \u0438 \u043a\u043e\u0434.");
+  if (!user) return ctx.reply("Сначала нажми /start, потом отправь /pro и код.");
   await prisma.user.update({ where: { id: user.id }, data: { isLifetime: true } });
-  await ctx.reply("\u0413\u043e\u0442\u043e\u0432\u043e! PRO \u0430\u043a\u0442\u0438\u0432\u0438\u0440\u043e\u0432\u0430\u043d \u043d\u0430\u0432\u0441\u0435\u0433\u0434\u0430 \ud83d\udc08\u200d\u2b1b\u2764\ufe0f \u041e\u0442\u043a\u0440\u043e\u0439 \u0427\u043e\u043f\u0430 \u2014 \u0432\u0441\u0435 \u0444\u0443\u043d\u043a\u0446\u0438\u0438 \u0431\u0435\u0437 \u043e\u0433\u0440\u0430\u043d\u0438\u0447\u0435\u043d\u0438\u0439.");
+  await ctx.reply("Готово! PRO активирован навсегда 🐈‍⬛❤️ Открой Чопа — все функции без ограничений.");
 });
 
-// iPhone Back Tap setup guide (double-tap the back of the phone -> speak -> Chop sorts it).
+// Short text-only version of the iPhone guide (tap-to-copy values).
 const IPHONE_GUIDE =
-  "\ud83d\udcf1 <b>\u0413\u043e\u043b\u043e\u0441 \u0427\u043e\u043f\u0443 \u0434\u0432\u043e\u0439\u043d\u044b\u043c \u043a\u0430\u0441\u0430\u043d\u0438\u0435\u043c \u043f\u043e iPhone</b>\n\n" +
-  "\u041d\u0430\u0441\u0442\u0440\u043e\u0439 \u043e\u0434\u0438\u043d \u0440\u0430\u0437 \u2014 \u043f\u043e\u0442\u043e\u043c \u0434\u0432\u0430\u0436\u0434\u044b \u0441\u0442\u0443\u0447\u0438\u0448\u044c \u043f\u043e \u0437\u0430\u0434\u043d\u0435\u0439 \u043a\u0440\u044b\u0448\u043a\u0435 \u0442\u0435\u043b\u0435\u0444\u043e\u043d\u0430, \u0433\u043e\u0432\u043e\u0440\u0438\u0448\u044c, \u0430 \u044f \u0440\u0430\u0437\u043b\u043e\u0436\u0443 \u0432\u0441\u0451 \u043f\u043e \u0432\u043a\u043b\u0430\u0434\u043a\u0430\u043c.\n\n" +
-  "<b>1. \u0422\u043e\u043a\u0435\u043d.</b> \u041e\u0442\u043f\u0440\u0430\u0432\u044c \u043c\u043d\u0435 /voicetoken \u0438 \u0441\u043a\u043e\u043f\u0438\u0440\u0443\u0439 \u043a\u043e\u0434.\n\n" +
-  "<b>2. \u041a\u043e\u043c\u0430\u043d\u0434\u0430</b> (\u043f\u0440\u0438\u043b\u043e\u0436\u0435\u043d\u0438\u0435 \u00ab\u041a\u043e\u043c\u0430\u043d\u0434\u044b\u00bb / Shortcuts):\n" +
-  "\u2022 \u041d\u043e\u0432\u0430\u044f \u043a\u043e\u043c\u0430\u043d\u0434\u0430 \u2192 \u0434\u043e\u0431\u0430\u0432\u044c \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u0435 <b>\u00ab\u0417\u0430\u043f\u0438\u0441\u0430\u0442\u044c \u0430\u0443\u0434\u0438\u043e\u00bb</b>\n" +
-  "\u2022 \u0414\u043e\u0431\u0430\u0432\u044c \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u0435 <b>\u00ab\u041f\u043e\u043b\u0443\u0447\u0438\u0442\u044c \u0441\u043e\u0434\u0435\u0440\u0436\u0438\u043c\u043e\u0435 URL\u00bb</b> \u0438 \u043d\u0430\u0441\u0442\u0440\u043e\u0439:\n" +
-  "   \u2013 URL: <code>https://chopcode-production.up.railway.app/voice-webhook</code>\n" +
-  "   \u2013 \u041c\u0435\u0442\u043e\u0434: <b>POST</b>\n" +
-  "   \u2013 \u0417\u0430\u0433\u043e\u043b\u043e\u0432\u043e\u043a: <code>X-Voice-Token</code> = \u0442\u0432\u043e\u0439 \u0442\u043e\u043a\u0435\u043d \u0438\u0437 \u0448\u0430\u0433\u0430 1\n" +
-  "   \u2013 \u0422\u0435\u043b\u043e: <b>\u0424\u043e\u0440\u043c\u0430</b> \u2192 \u043f\u043e\u043b\u0435 \u0442\u0438\u043f\u0430 <b>\u0424\u0430\u0439\u043b</b> \u0441 \u0438\u043c\u0435\u043d\u0435\u043c <code>audio</code> = \u00ab\u0417\u0430\u043f\u0438\u0441\u0430\u043d\u043d\u043e\u0435 \u0430\u0443\u0434\u0438\u043e\u00bb\n" +
-  "\u2022 \u041d\u0430\u0437\u043e\u0432\u0438 \u043a\u043e\u043c\u0430\u043d\u0434\u0443 <b>\u00ab\u0427\u043e\u043f\u00bb</b>\n\n" +
-  "<b>3. \u0414\u0432\u043e\u0439\u043d\u043e\u0435 \u043a\u0430\u0441\u0430\u043d\u0438\u0435:</b>\n" +
-  "\u041d\u0430\u0441\u0442\u0440\u043e\u0439\u043a\u0438 \u2192 \u0423\u043d\u0438\u0432\u0435\u0440\u0441\u0430\u043b\u044c\u043d\u044b\u0439 \u0434\u043e\u0441\u0442\u0443\u043f \u2192 \u041a\u0430\u0441\u0430\u043d\u0438\u0435 \u2192 <b>\u041a\u0430\u0441\u0430\u043d\u0438\u0435 \u0437\u0430\u0434\u043d\u0435\u0439 \u043f\u0430\u043d\u0435\u043b\u0438</b> \u2192 <b>\u0414\u0432\u043e\u0439\u043d\u043e\u0435 \u043a\u0430\u0441\u0430\u043d\u0438\u0435</b> \u2192 \u0432\u044b\u0431\u0435\u0440\u0438 \u00ab\u0427\u043e\u043f\u00bb.\n\n" +
-  "<b>4. \u0413\u043e\u0442\u043e\u0432\u043e!</b> \u0421\u0442\u0443\u043a\u043d\u0438 \u0434\u0432\u0430\u0436\u0434\u044b \u043f\u043e \u043a\u0440\u044b\u0448\u043a\u0435, \u0441\u043a\u0430\u0436\u0438 \u0444\u0440\u0430\u0437\u0443 \u2014 \u044f \u043e\u0442\u0432\u0435\u0447\u0443 \u043f\u0440\u044f\u043c\u043e \u0437\u0434\u0435\u0441\u044c. \ud83d\udc08\u200d\u2b1b";
+  "📱 <b>Голос Чопу двойным касанием по iPhone</b>\n\n" +
+  "Настрой один раз — потом дважды стучишь по задней крышке телефона, говоришь, а я разложу всё по вкладкам.\n\n" +
+  "<b>1. Токен.</b> Отправь мне /voicetoken и скопируй код.\n\n" +
+  "<b>2. Команда</b> (приложение «Команды» / Shortcuts):\n" +
+  "• Новая команда → добавь действие <b>«Записать аудио»</b>\n" +
+  "• Добавь действие <b>«Получить содержимое URL»</b> и настрой:\n" +
+  "   – URL: <code>https://chopcode-production.up.railway.app/voice-webhook</code>\n" +
+  "   – Метод: <b>POST</b>\n" +
+  "   – Заголовок: <code>X-Voice-Token</code> = твой токен из шага 1\n" +
+  "   – Тело: <b>Форма</b> → поле типа <b>Файл</b> с именем <code>audio</code> = «Записанное аудио»\n" +
+  "• Назови команду <b>«Чоп»</b>\n\n" +
+  "<b>3. Двойное касание:</b>\n" +
+  "Настройки → Универсальный доступ → Касание → <b>Касание задней панели</b> → <b>Двойное касание</b> → выбери «Чоп».\n\n" +
+  "<b>4. Готово!</b> Стукни дважды по крышке, скажи фразу — я отвечу прямо здесь. 🐈‍⬛";
 
 bot.command("iphone", async (ctx) => {
   await ctx.reply(IPHONE_GUIDE, { parse_mode: "HTML", disable_web_page_preview: true });
 });
 
+// --- Full illustrated setup guide (/setup): copy-values text + annotated photos ---
+
+const SETUP_INTRO =
+  "📱 <b>Установка голоса Чопа на iPhone</b>\n\n" +
+  "Настрой один раз — потом двойным касанием по задней крышке телефона говоришь, а я всё сам разложу по вкладкам.\n\n" +
+  "<b>Всё, что нужно вставить</b> (нажми на строку — скопируется):\n\n" +
+  "🔗 Адрес (URL):\n<code>https://chopcode-production.up.railway.app/voice-webhook</code>\n\n" +
+  "🏷 Заголовок:\n<code>X-Voice-Token</code>\n\n" +
+  "📎 Имя поля:\n<code>audio</code>\n\n" +
+  "🔑 Твой личный токен — команда /voicetoken\n\n" +
+  "Ниже — все шаги с фото и стрелками 👇";
+
+// Each photo of the guide, with a short caption. Images are served from the frontend.
+const GUIDE_PHOTOS = [
+  ["iphone_01.png", "Шаг 1. Токен: отправь /voicetoken и скопируй код"],
+  ["iphone_02.png", "Шаг 2. Открой приложение «Команды» (Shortcuts)"],
+  ["iphone_03.png", "Шаг 3. «+» — новая команда. Готовая — зелёная «Чоп»"],
+  ["iphone_04.png", "Шаг 4. Добавь действие «Записать аудио»"],
+  ["iphone_05.png", "Шаг 5. Добавь действие «Получить содержимое URL»"],
+  ["iphone_06.png", "Шаг 6. URL, Метод POST, заголовок X-Voice-Token, Тело запроса = Форма, поле audio (тип Файл = «Записанное аудио»)"],
+  ["iphone_07.png", "Шаг 7. Настройки → Универсальный доступ"],
+  ["iphone_08.png", "Шаг 8. Касание"],
+  ["iphone_09.png", "Шаг 9. Касание задней панели"],
+  ["iphone_10.png", "Шаг 10. Двойное касание → выбери «Чоп»"],
+  ["iphone_11.png", "Доп: команду можно вынести на экран «Домой»"],
+  ["iphone_12.png", "Готово! Так выглядит настроенная команда «Чоп» ✓"],
+];
+
+function photoGroup(items) {
+  return items.map(([file, caption]) => ({
+    type: "photo",
+    media: `${GUIDE_BASE}/${file}`,
+    caption,
+  }));
+}
+
+bot.command("setup", async (ctx) => {
+  try {
+    await ctx.reply(SETUP_INTRO, { parse_mode: "HTML", disable_web_page_preview: true });
+    // Telegram allows at most 10 photos per album, so send two groups.
+    await ctx.replyWithMediaGroup(photoGroup(GUIDE_PHOTOS.slice(0, 6)));
+    await ctx.replyWithMediaGroup(photoGroup(GUIDE_PHOTOS.slice(6)));
+    await ctx.reply(
+      "Проверь: стукни дважды по задней крышке → скажи фразу → я отвечу здесь «🎙 Распознал…».\n\nЗастрял на шаге — просто напиши мне номер шага. 🐾"
+    );
+  } catch (e) {
+    console.error("setup guide error:", e.message);
+    // Fallback to the text-only guide if the photos can't be sent.
+    await ctx.reply(IPHONE_GUIDE, { parse_mode: "HTML", disable_web_page_preview: true });
+  }
+});
+
 // Show these commands in the bot's command menu.
 bot.telegram
   .setMyCommands([
-    { command: "start", description: "\u041e\u0442\u043a\u0440\u044b\u0442\u044c \u0427\u043e\u043f\u0430" },
-    { command: "iphone", description: "\u0413\u043e\u043b\u043e\u0441 \u043f\u043e \u043a\u0430\u0441\u0430\u043d\u0438\u044e (iPhone)" },
-    { command: "voicetoken", description: "\u041c\u043e\u0439 \u0442\u043e\u043a\u0435\u043d \u0434\u043b\u044f iPhone-\u043a\u043e\u043c\u0430\u043d\u0434\u044b" },
+    { command: "start", description: "Открыть Чопа" },
+    { command: "setup", description: "Установка голоса на iPhone (с фото)" },
+    { command: "voicetoken", description: "Мой токен для iPhone-команды" },
   ])
   .catch((e) => console.error("setMyCommands failed:", e.message));
 
@@ -139,7 +195,7 @@ async function handleVoiceMessage(ctx, fileId) {
   const access = await checkVoiceAccess(user.id);
   if (!access.allowed) {
     return ctx.reply(
-      "\u0411\u0435\u0441\u043f\u043b\u0430\u0442\u043d\u044b\u0435 \u0433\u043e\u043b\u043e\u0441\u043e\u0432\u044b\u0435 \u0437\u0430\u043a\u043e\u043d\u0447\u0438\u043b\u0438\u0441\u044c \ud83d\ude42 \u041e\u0442\u043a\u0440\u043e\u0439 \u0427\u043e\u043f\u0430 \u0438 \u043e\u0444\u043e\u0440\u043c\u0438 PRO, \u0447\u0442\u043e\u0431\u044b \u043f\u0440\u043e\u0434\u043e\u043b\u0436\u0438\u0442\u044c \u0431\u0435\u0437 \u043e\u0433\u0440\u0430\u043d\u0438\u0447\u0435\u043d\u0438\u0439."
+      "Бесплатные голосовые закончились 🙂 Открой Чопа и оформи PRO, чтобы продолжить без ограничений."
     );
   }
 
@@ -156,20 +212,20 @@ async function handleVoiceMessage(ctx, fileId) {
   }
   const humanAll = results.map((r) => r.human).join("\n");
 
-  await ctx.reply(`\ud83c\udf99 \u0420\u0430\u0441\u043f\u043e\u0437\u043d\u0430\u043b: \u00ab${text}\u00bb\n\n${humanAll}`);
+  await ctx.reply(`🎙 Распознал: «${text}»\n\n${humanAll}`);
 }
 
 bot.on(message("voice"), (ctx) =>
   handleVoiceMessage(ctx, ctx.message.voice.file_id).catch(async (e) => {
     console.error("voice message error:", e.message);
-    await ctx.reply("\u041d\u0435 \u043f\u043e\u043b\u0443\u0447\u0438\u043b\u043e\u0441\u044c \u043e\u0431\u0440\u0430\u0431\u043e\u0442\u0430\u0442\u044c \u0433\u043e\u043b\u043e\u0441\u043e\u0432\u043e\u0435, \u043f\u043e\u043f\u0440\u043e\u0431\u0443\u0439 \u0435\u0449\u0451 \u0440\u0430\u0437.");
+    await ctx.reply("Не получилось обработать голосовое, попробуй ещё раз.");
   })
 );
 
 bot.on(message("audio"), (ctx) =>
   handleVoiceMessage(ctx, ctx.message.audio.file_id).catch(async (e) => {
     console.error("audio message error:", e.message);
-    await ctx.reply("\u041d\u0435 \u043f\u043e\u043b\u0443\u0447\u0438\u043b\u043e\u0441\u044c \u043e\u0431\u0440\u0430\u0431\u043e\u0442\u0430\u0442\u044c \u0430\u0443\u0434\u0438\u043e, \u043f\u043e\u043f\u0440\u043e\u0431\u0443\u0439 \u0435\u0449\u0451 \u0440\u0430\u0437.");
+    await ctx.reply("Не получилось обработать аудио, попробуй ещё раз.");
   })
 );
 
@@ -213,7 +269,7 @@ async function sendMorningDigests() {
       take: 10,
     });
     if (!items.length) continue;
-    const lines = items.map((r) => `${mskHm(r.dueAt)} \u2014 ${r.text}`);
+    const lines = items.map((r) => `${mskHm(r.dueAt)} — ${r.text}`);
     const text = await morningDigest(lines, u.firstName || "");
     throttledSend(u.telegramId, text);
   }
@@ -236,7 +292,7 @@ async function sendEveningMotivation() {
     const streak = alive ? u.streakCount || 0 : 0;
     if (!todayMeals.length && !streak) continue; // don't ping inactive users
     const kcal = Math.round(todayMeals.reduce((s, m) => s + m.calories, 0));
-    const summary = `\u0441\u0435\u0433\u043e\u0434\u043d\u044f \u0437\u0430\u043f\u0438\u0441\u0430\u043d\u043e ${kcal} \u043a\u043a\u0430\u043b \u0437\u0430 ${todayMeals.length} \u043f\u0440\u0438\u0451\u043c(\u043e\u0432), \u0441\u0435\u0440\u0438\u044f ${streak} \u0434\u043d.`;
+    const summary = `сегодня записано ${kcal} ккал за ${todayMeals.length} приём(ов), серия ${streak} дн.`;
     const text = await eveningMotivation(summary);
     throttledSend(u.telegramId, text);
   }
