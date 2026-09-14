@@ -3,6 +3,9 @@ import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
+// Length of the free trial given to every brand-new user, in days.
+const TRIAL_DAYS = 3;
+
 // Проверяет initData, присланный Telegram Mini App SDK (window.Telegram.WebApp.initData)
 // https://core.telegram.org/bots/webapps#validating-data-received-via-the-mini-app
 export function verifyTelegramInitData(initData, botToken) {
@@ -33,6 +36,8 @@ export async function requireTelegramUser(req, res, next) {
     const tgUser = verifyTelegramInitData(initData, process.env.BOT_TOKEN);
     if (!tgUser) return res.status(401).json({ error: "invalid init data" });
 
+    const trialUntil = new Date(Date.now() + TRIAL_DAYS * 24 * 60 * 60 * 1000);
+
     const user = await prisma.user.upsert({
       where: { telegramId: String(tgUser.id) },
       update: { firstName: tgUser.first_name, username: tgUser.username },
@@ -40,6 +45,9 @@ export async function requireTelegramUser(req, res, next) {
         telegramId: String(tgUser.id),
         firstName: tgUser.first_name,
         username: tgUser.username,
+        // 3-day free trial: every new user gets full access for 3 days.
+        // Only set on create, so it never renews itself for existing users.
+        subscriptionUntil: trialUntil,
       },
     });
 
