@@ -2,9 +2,14 @@ import { prisma } from "../telegramAuth.js";
 import { calculateTargets } from "../kbjuCalc.js";
 
 // Real "chat with Chop": gathers the user's own data and answers as Chop via Groq.
-// Free tier; tries several models in case one is unavailable.
+// Free tier; tries several models in case one is unavailable OR returns empty text.
+//
+// llama-3.1-8b-instant is first on purpose: it is a plain instruct model that
+// writes the answer directly. The gpt-oss models are "reasoning" models that can
+// spend the whole token budget thinking silently and return empty content, which
+// showed up as the chat sometimes replying "скоро научусь".
 
-const MODELS = ["openai/gpt-oss-20b", "llama-3.1-8b-instant", "openai/gpt-oss-120b"];
+const MODELS = ["llama-3.1-8b-instant", "openai/gpt-oss-20b", "openai/gpt-oss-120b"];
 
 const PERSONA = `Ты — Чоп, милый и дружелюбный чёрный кот, личный помощник в приложении-органайзере.
 Говоришь на «ты», тепло, с лёгким юмором и заботой, коротко и по делу (2–5 предложений).
@@ -32,11 +37,16 @@ async function groqChat(apiKey, messages) {
     const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({ model, temperature: 0.6, max_tokens: 500, messages }),
+      body: JSON.stringify({ model, temperature: 0.6, max_tokens: 900, messages }),
     });
     if (res.ok) {
       const d = await res.json();
-      return (d.choices?.[0]?.message?.content || "").trim();
+      const content = (d.choices?.[0]?.message?.content || "").trim();
+      if (content) return content;
+      // Model answered 200 but with empty text — try the next model instead of
+      // returning an empty string (which the app shows as "скоро научусь").
+      lastErr = "empty content from " + model;
+      continue;
     }
     lastErr = res.status + " " + (await res.text());
     if (res.status !== 404 && res.status !== 400) break;
