@@ -107,6 +107,24 @@ function planSubtitle(plan) {
   return Math.round(plan.price / plan.months) + " " + T.perMonth;
 }
 
+// Legal documents (published on telegra.ph). Shown as small links on the Premium screen.
+const DOCS = [
+  ["Политика конфиденциальности", "https://telegra.ph/Politika-konfidencialnosti-09-11-51"],
+  ["Пользовательское соглашение", "https://telegra.ph/Polzovatelskoe-soglashenie-09-11-23"],
+  ["Тарифы", "https://telegra.ph/Tarify-09-11"],
+];
+
+// Opens a link correctly inside the Telegram Mini App, with a browser fallback.
+function openDoc(url) {
+  try {
+    if (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.openLink) {
+      window.Telegram.WebApp.openLink(url);
+      return;
+    }
+  } catch (e) {}
+  window.open(url, "_blank");
+}
+
 function Premium({ onClose }) {
   const [plans, setPlans] = useState([]);
   const [selected, setSelected] = useState("year");
@@ -165,6 +183,27 @@ function Premium({ onClose }) {
           {T.checkout}{current ? " \u00b7 " + current.price + " " + T.rub : ""}
         </button>
         <div className="prem-note">{T.payNote}</div>
+        <div
+          style={{
+            marginTop: 10,
+            textAlign: "center",
+            fontSize: 11,
+            lineHeight: 1.7,
+            opacity: 0.6,
+          }}
+        >
+          {DOCS.map(([label, url], i) => (
+            <span key={url}>
+              {i > 0 ? " · " : ""}
+              <a
+                onClick={() => openDoc(url)}
+                style={{ color: "inherit", textDecoration: "underline", cursor: "pointer" }}
+              >
+                {label}
+              </a>
+            </span>
+          ))}
+        </div>
       </div>
     </div>
   );
