@@ -76,3 +76,59 @@ export default function ProfileForm({ initial, onSaved }) {
           <input
             placeholder="Жиры, г"
             type="number"
+            value={form.customFat}
+            onChange={(e) => setForm({ ...form, customFat: e.target.value })}
+          />
+          <input
+            placeholder="Углеводы, г"
+            type="number"
+            value={form.customCarbs}
+            onChange={(e) => setForm({ ...form, customCarbs: e.target.value })}
+          />
+        </>
+      ) : (
+        <>
+          <select
+            value={form.gender}
+            onChange={(e) => setForm({ ...form, gender: e.target.value })}
+          >
+            <option value="male">Мужчина</option>
+            <option value="female">Женщина</option>
+          </select>
+          <input
+            placeholder="Возраст"
+            type="number"
+            value={form.age}
+            onChange={(e) => setForm({ ...form, age: e.target.value })}
+          />
+          <input
+            placeholder="Рост, см"
+            type="number"
+            value={form.heightCm}
+            onChange={(e) => setForm({ ...form, heightCm: e.target.value })}
+          />
+          <input
+            placeholder="Вес, кг"
+            type="number"
+            value={form.weightKg}
+            onChange={(e) => setForm({ ...form, weightKg: e.target.value })}
+          />
+          <select
+            value={form.activity}
+            onChange={(e) => setForm({ ...form, activity: e.target.value })}
+          >
+            {Object.entries(ACTIVITY_LABELS).map(([k, v]) => (
+              <option key={k} value={k}>
+                {v}
+              </option>
+            ))}
+          </select>
+        </>
+      )}
+
+      <button className="primary" onClick={save}>
+        {isCustom ? "Сохранить нормы" : "Рассчитать норму"}
+      </button>
+    </div>
+  );
+}
