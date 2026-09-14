@@ -11,8 +11,9 @@ const ACTIVITY_LABELS = {
 
 const GOAL_LABELS = {
   lose: "Похудение",
-  maintain: "Поддержание веса",
   gain: "Набор массы",
+  maintain: "Поддержание веса",
+  custom: "Свой режим",
 };
 
 export default function ProfileForm({ initial, onSaved }) {
@@ -23,12 +24,22 @@ export default function ProfileForm({ initial, onSaved }) {
       heightCm: "",
       weightKg: "",
       activity: "moderate",
-      goal: "maintain",
+      goal: "lose",
+      customCalories: "",
+      customProtein: "",
+      customFat: "",
+      customCarbs: "",
     }
   );
 
+  const isCustom = form.goal === "custom";
+
   const save = async () => {
-    if (!form.age || !form.heightCm || !form.weightKg) return;
+    if (isCustom) {
+      if (!form.customCalories) return;
+    } else if (!form.age || !form.heightCm || !form.weightKg) {
+      return;
+    }
     const res = await api.post("/api/profile", form);
     onSaved(res);
   };
@@ -36,35 +47,7 @@ export default function ProfileForm({ initial, onSaved }) {
   return (
     <div className="card">
       <h3>Твои параметры</h3>
-      <select value={form.gender} onChange={(e) => setForm({ ...form, gender: e.target.value })}>
-        <option value="male">Мужчина</option>
-        <option value="female">Женщина</option>
-      </select>
-      <input
-        placeholder="Возраст"
-        type="number"
-        value={form.age}
-        onChange={(e) => setForm({ ...form, age: e.target.value })}
-      />
-      <input
-        placeholder="Рост, см"
-        type="number"
-        value={form.heightCm}
-        onChange={(e) => setForm({ ...form, heightCm: e.target.value })}
-      />
-      <input
-        placeholder="Вес, кг"
-        type="number"
-        value={form.weightKg}
-        onChange={(e) => setForm({ ...form, weightKg: e.target.value })}
-      />
-      <select value={form.activity} onChange={(e) => setForm({ ...form, activity: e.target.value })}>
-        {Object.entries(ACTIVITY_LABELS).map(([k, v]) => (
-          <option key={k} value={k}>
-            {v}
-          </option>
-        ))}
-      </select>
+
       <select value={form.goal} onChange={(e) => setForm({ ...form, goal: e.target.value })}>
         {Object.entries(GOAL_LABELS).map(([k, v]) => (
           <option key={k} value={k}>
@@ -72,9 +55,24 @@ export default function ProfileForm({ initial, onSaved }) {
           </option>
         ))}
       </select>
-      <button className="primary" onClick={save}>
-        Рассчитать норму
-      </button>
-    </div>
-  );
-}
+
+      {isCustom ? (
+        <>
+          <p style={{ color: "var(--muted)", fontSize: 13, margin: "6px 0 2px" }}>
+            Задай свои дневные нормы вручную:
+          </p>
+          <input
+            placeholder="Калории, ккал"
+            type="number"
+            value={form.customCalories}
+            onChange={(e) => setForm({ ...form, customCalories: e.target.value })}
+          />
+          <input
+            placeholder="Белки, г"
+            type="number"
+            value={form.customProtein}
+            onChange={(e) => setForm({ ...form, customProtein: e.target.value })}
+          />
+          <input
+            placeholder="Жиры, г"
+            type="number"
