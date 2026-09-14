@@ -11,9 +11,11 @@ import { warmReminder, hourNudge, morningDigest, eveningMotivation } from "./ser
 
 export const bot = new Telegraf(process.env.BOT_TOKEN);
 
-// Where the illustrated guide images live (served from the frontend on Vercel).
-// Override with GUIDE_BASE env if the domain changes.
-const GUIDE_BASE = process.env.GUIDE_BASE || "https://chopcode.vercel.app";
+// Where the illustrated guide images live. Served straight from GitHub via the
+// jsDelivr CDN (independent of Vercel). Override with GUIDE_BASE env if needed.
+const GUIDE_BASE =
+  process.env.GUIDE_BASE ||
+  "https://cdn.jsdelivr.net/gh/makofo/chopcode@main/frontend/public";
 
 // Sets the persistent menu button (next to the chat input) for one specific chat.
 // Called on /start so the button appears immediately for that user, even if the
