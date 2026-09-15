@@ -87,6 +87,72 @@ bot.command("support", async (ctx) => {
   });
 });
 
+// Owner-only stats (NOT shown in the public command menu).
+// Set your numeric Telegram ID in the ADMIN_ID env var; until then the command
+// just replies with your ID so you can copy it into Railway.
+bot.command("stats", async (ctx) => {
+  const myId = String(ctx.from.id);
+  const admin = process.env.ADMIN_ID;
+  if (!admin) {
+    return ctx.reply(
+      `Твой Telegram ID: ${myId}\n\nЧтобы включить статистику только для себя, добавь в Railway → Variables переменную ADMIN_ID со значением ${myId}, затем снова отправь /stats.`
+    );
+  }
+  if (myId !== admin) return; // silently ignore everyone else
+
+  try {
+    const now = new Date();
+    const day = mskDayStr(now); // YYYY-MM-DD in Moscow time
+    const [Y, M, D] = day.split("-").map(Number);
+    const todayStart = new Date(Date.UTC(Y, M - 1, D, 0, 0, 0) - 3 * 60 * 60 * 1000);
+    const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+    const [
+      totalUsers, newToday, new7d, lifetime, activeAccess,
+      mealsToday, txToday, remToday, diaryToday,
+      mealsWeek, txWeek, remWeek, diaryWeek,
+    ] = await Promise.all([
+      prisma.user.count(),
+      prisma.user.count({ where: { createdAt: { gte: todayStart } } }),
+      prisma.user.count({ where: { createdAt: { gte: weekAgo } } }),
+      prisma.user.count({ where: { isLifetime: true } }),
+      prisma.user.count({ where: { OR: [{ isLifetime: true }, { subscriptionUntil: { gt: now } }] } }),
+      prisma.meal.findMany({ where: { eatenAt: { gte: todayStart } }, select: { userId: true } }),
+      prisma.transaction.findMany({ where: { createdAt: { gte: todayStart } }, select: { userId: true } }),
+      prisma.reminder.findMany({ where: { createdAt: { gte: todayStart } }, select: { userId: true } }),
+      prisma.diaryEntry.findMany({ where: { createdAt: { gte: todayStart } }, select: { userId: true } }),
+      prisma.meal.findMany({ where: { eatenAt: { gte: weekAgo } }, select: { userId: true } }),
+      prisma.transaction.findMany({ where: { createdAt: { gte: weekAgo } }, select: { userId: true } }),
+      prisma.reminder.findMany({ where: { createdAt: { gte: weekAgo } }, select: { userId: true } }),
+      prisma.diaryEntry.findMany({ where: { createdAt: { gte: weekAgo } }, select: { userId: true } }),
+    ]);
+
+    const requestsToday = mealsToday.length + txToday.length + remToday.length + diaryToday.length;
+    const activeToday = new Set([...mealsToday, ...txToday, ...remToday, ...diaryToday].map((x) => x.userId)).size;
+    const activeWeek = new Set([...mealsWeek, ...txWeek, ...remWeek, ...diaryWeek].map((x) => x.userId)).size;
+    const trialish = Math.max(0, activeAccess - lifetime);
+
+    const msg =
+      "📊 <b>Статистика ChopBot</b>\n\n" +
+      `👥 Всего пользователей: <b>${totalUsers}</b>\n` +
+      `🆕 Новых сегодня: <b>${newToday}</b>\n` +
+      `🆕 Новых за 7 дней: <b>${new7d}</b>\n\n` +
+      `🟢 Активных сегодня: <b>${activeToday}</b>\n` +
+      `🟢 Активных за 7 дней: <b>${activeWeek}</b>\n` +
+      `✍️ Записей создано сегодня: <b>${requestsToday}</b>\n\n` +
+      `⭐ С активным доступом: <b>${activeAccess}</b>\n` +
+      `   • пожизненный PRO: ${lifetime}\n` +
+      `   • подписка/триал: ${trialish}\n\n` +
+      "<i>«Активные» — те, кто что-то записал (приём пищи, трату, напоминание, заметку). " +
+      "Строка «оплатили подписку» появится, когда подключим оплату Platega.</i>";
+
+    await ctx.reply(msg, { parse_mode: "HTML" });
+  } catch (e) {
+    console.error("stats error:", e.message);
+    await ctx.reply("Не удалось собрать статистику: " + e.message);
+  }
+});
+
 // Command to get the personal voice token for the iOS Shortcut
 bot.command("voicetoken", async (ctx) => {
   const telegramId = String(ctx.from.id);
