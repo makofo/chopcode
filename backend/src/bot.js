@@ -63,9 +63,28 @@ bot.start(async (ctx) => {
   await ctx.reply(
     "Привет! Я Чоп 🐈‍⬛ Помогу с напоминаниями, финансами, КБЖУ и дневником — всё в одном месте. Жми кнопку ниже или «Открыть Чопа» рядом с полем ввода.\n\nМожешь наговаривать мне голосовые прямо в чат — я всё разложу. А чтобы запускать меня двойным касанием по iPhone — отправь /setup (там вся инструкция с фото).\n\nplat chek",
     Markup.inlineKeyboard([
-      Markup.button.webApp("🐈‍⬛ Открыть Чопа", process.env.WEBAPP_URL),
+      [Markup.button.webApp("🐈‍⬛ Открыть Чопа", process.env.WEBAPP_URL)],
+      [Markup.button.url("💬 Поддержка", "https://t.me/makofo74")],
     ])
   );
+});
+
+// Support contacts (also shown as a button; required for the payment provider review).
+const SUPPORT_TEXT =
+  "💬 <b>Поддержка ChopBot</b>\n\n" +
+  "Если что-то не работает или есть вопрос — напиши нам, поможем:\n\n" +
+  "• Telegram: @makofo74\n" +
+  "• E-mail: arsmakofo@gmail.com\n\n" +
+  "Мы на связи 🐈‍⬛";
+
+bot.command("support", async (ctx) => {
+  await ctx.reply(SUPPORT_TEXT, {
+    parse_mode: "HTML",
+    disable_web_page_preview: true,
+    ...Markup.inlineKeyboard([
+      Markup.button.url("Написать в поддержку", "https://t.me/makofo74"),
+    ]),
+  });
 });
 
 // Command to get the personal voice token for the iOS Shortcut
@@ -174,6 +193,7 @@ bot.telegram
     { command: "start", description: "Открыть Чопа" },
     { command: "setup", description: "Установка голоса на iPhone (с фото)" },
     { command: "voicetoken", description: "Мой токен для iPhone-команды" },
+    { command: "support", description: "Поддержка — связаться с нами" },
   ])
   .catch((e) => console.error("setMyCommands failed:", e.message));
 
@@ -277,26 +297,37 @@ async function sendMorningDigests() {
   }
 }
 
-// Evening motivation (~20:00 MSK): calories result + streak, only for users active today.
+// Evening message (~20:00 MSK).
+// PRAISE only users who actually logged a meal TODAY (streakLastDay === today).
+// If a user logged yesterday but not today, their streak is about to break at
+// midnight — send an honest reminder, NOT praise. Everyone else gets nothing.
 async function sendEveningMotivation() {
   const now = new Date();
   const today = mskDayStr(now);
   const yest = mskDayStr(new Date(now.getTime() - 24 * 60 * 60 * 1000));
   const users = await prisma.user.findMany();
   for (const u of users) {
-    const meals = await prisma.meal.findMany({
-      where: { userId: u.id },
-      orderBy: { eatenAt: "desc" },
-      take: 40,
-    });
-    const todayMeals = meals.filter((m) => mskDayStr(new Date(m.eatenAt)) === today);
-    const alive = u.streakLastDay === today || u.streakLastDay === yest;
-    const streak = alive ? u.streakCount || 0 : 0;
-    if (!todayMeals.length && !streak) continue; // don't ping inactive users
-    const kcal = Math.round(todayMeals.reduce((s, m) => s + m.calories, 0));
-    const summary = `сегодня записано ${kcal} ккал за ${todayMeals.length} приём(ов), серия ${streak} дн.`;
-    const text = await eveningMotivation(summary);
-    throttledSend(u.telegramId, text);
+    const loggedToday = u.streakLastDay === today; // set only when a meal was logged today
+    const streakAtRisk = u.streakLastDay === yest && (u.streakCount || 0) > 0;
+
+    if (loggedToday) {
+      const meals = await prisma.meal.findMany({
+        where: { userId: u.id },
+        orderBy: { eatenAt: "desc" },
+        take: 40,
+      });
+      const todayMeals = meals.filter((m) => mskDayStr(new Date(m.eatenAt)) === today);
+      const kcal = Math.round(todayMeals.reduce((s, m) => s + m.calories, 0));
+      const summary = `сегодня записано ${kcal} ккал за ${todayMeals.length} приём(ов), серия ${u.streakCount || 0} дн.`;
+      const text = await eveningMotivation(summary);
+      throttledSend(u.telegramId, text);
+    } else if (streakAtRisk) {
+      throttledSend(
+        u.telegramId,
+        `🌙 Ты сегодня ещё ничего не записал в КБЖУ. Твоя серия ${u.streakCount} 🔥 под угрозой — запиши хотя бы один приём пищи, чтобы её не потерять!`
+      );
+    }
+    // else: nothing logged and no active streak — don't ping.
   }
 }
 
