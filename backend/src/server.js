@@ -13,6 +13,7 @@ import assistantRouter from "./routes/assistant.js";
 import voiceWebhookRouter from "./routes/voiceWebhook.js";
 import profileRouter from "./routes/profile.js";
 import billingRouter from "./routes/billing.js";
+import plategaWebhookRouter from "./routes/plategaWebhook.js";
 
 const app = express();
 app.use(cors());
@@ -23,13 +24,17 @@ app.use(express.json());
 const voiceLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 10,
-  message: { error: "\u0421\u043b\u0438\u0448\u043a\u043e\u043c \u043c\u043d\u043e\u0433\u043e \u0433\u043e\u043b\u043e\u0441\u043e\u0432\u044b\u0445 \u0437\u0430\u043f\u0440\u043e\u0441\u043e\u0432, \u043f\u043e\u043f\u0440\u043e\u0431\u0443\u0439 \u0447\u0435\u0440\u0435\u0437 \u043c\u0438\u043d\u0443\u0442\u0443" },
+  message: { error: "Слишком много голосовых запросов, попробуй через минуту" },
 });
 app.use("/api/assistant/process-audio", voiceLimiter);
 app.use("/voice-webhook", voiceLimiter);
 
 // Public endpoint (per-user token, not Telegram initData) for iOS Shortcuts / Back Tap
 app.use("/voice-webhook", voiceWebhookRouter);
+
+// Public endpoint for the Platega payment provider callback (authenticated by
+// the X-MerchantId / X-Secret headers inside the router, not Telegram initData).
+app.use("/platega-webhook", plategaWebhookRouter);
 
 // Everything else requires valid Telegram initData from the Mini App
 app.use("/api/reminders", requireTelegramUser, remindersRouter);
@@ -62,7 +67,7 @@ app.listen(PORT, async () => {
       await bot.telegram.callApi("setChatMenuButton", {
         menu_button: {
           type: "web_app",
-          text: "\u041e\u0442\u043a\u0440\u044b\u0442\u044c \u0427\u043e\u043f\u0430",
+          text: "Открыть Чопа",
           web_app: { url: process.env.WEBAPP_URL },
         },
       });
