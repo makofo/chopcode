@@ -96,3 +96,17 @@ model DiaryEntry {
 
   @@index([userId, createdAt])
 }
+
+model Payment {
+  id            Int      @id @default(autoincrement())
+  transactionId String   @unique // Platega transaction id
+  userId        Int
+  plan          String
+  months        Int      @default(0)
+  lifetime      Boolean  @default(false)
+  amount        Float
+  status        String   @default("PENDING") // PENDING | CONFIRMED | CANCELED
+  createdAt     DateTime @default(now())
+
+  @@index([userId])
+}
