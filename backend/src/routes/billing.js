@@ -53,7 +53,10 @@ router.post("/subscribe", async (req, res) => {
     res.json({ ok: true, payUrl });
   } catch (e) {
     console.error("subscribe error:", e.message);
-    res.status(500).json({ error: "Не удалось создать платёж, попробуй позже." });
+    res.status(500).json({
+      error: "Не удалось создать платёж, попробуй позже.",
+      detail: String(e.message).slice(0, 400),
+    });
   }
 });
 
