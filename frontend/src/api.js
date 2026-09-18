@@ -13,7 +13,15 @@ async function request(path, options = {}) {
       ...(options.headers || {}),
     },
   });
-  if (!res.ok) throw new Error(`API ${path} -> ${res.status}`);
+  if (!res.ok) {
+    // Keep the response body so the UI can show the real reason (e.g. a payment error).
+    let detail = "";
+    try { detail = await res.text(); } catch (e) {}
+    const err = new Error(`API ${path} -> ${res.status}`);
+    err.status = res.status;
+    err.detail = detail;
+    throw err;
+  }
   return res.json();
 }
 
