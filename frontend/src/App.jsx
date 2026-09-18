@@ -150,7 +150,15 @@ function Premium({ onClose }) {
         alert(res.message || T.payErr);
       }
     } catch (e) {
-      alert(T.payErr);
+      // Show the real backend reason (helps diagnose Platega errors).
+      let reason = "";
+      try {
+        const j = JSON.parse(e.detail || "{}");
+        reason = j.detail || j.error || "";
+      } catch (_) {
+        reason = e.detail || "";
+      }
+      alert(T.payErr + (reason ? "\n\n" + String(reason).slice(0, 300) : ""));
     }
   };
 
