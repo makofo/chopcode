@@ -138,7 +138,17 @@ function Premium({ onClose }) {
   const pay = async () => {
     try {
       const res = await api.post("/api/billing/subscribe", { planId: selected });
-      alert(res.message || T.payStub);
+      const url = res.payUrl;
+      if (url) {
+        // Open the Platega pay page in Telegram (or a new tab as a fallback).
+        if (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.openLink) {
+          window.Telegram.WebApp.openLink(url);
+        } else {
+          window.open(url, "_blank");
+        }
+      } else {
+        alert(res.message || T.payErr);
+      }
     } catch (e) {
       alert(T.payErr);
     }
